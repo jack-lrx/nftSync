@@ -18,3 +18,7 @@ sync:
   realtime_interval: 5    # 实时监听任务间隔（秒）
   polling_interval: 72    # 补偿轮询任务间隔（秒），建议6块确认
   confirm_blocks: 6       # 事件最终确认所需区块数
+redis:
+  addr: "localhost:6379"
+  password: ""
+  db: 0

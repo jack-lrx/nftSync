@@ -14,12 +14,18 @@ type SyncConfig struct {
 	PollingInterval  int `yaml:"polling_interval"`
 	ConfirmBlocks    int `yaml:"confirm_blocks"`
 }
+type RedisConfig struct {
+	Addr     string `yaml:"addr"`
+	Password string `yaml:"password"`
+	DB       int    `yaml:"db"`
+}
 type AppConfig struct {
 	EthNodes     []NodeConfig `yaml:"eth_nodes"`
 	DatabaseDSN  string       `yaml:"database.dsn"`
 	APIPort      int          `yaml:"api.port"`
 	NFTContracts []string     `yaml:"nft_contracts"`
 	Sync         SyncConfig   `yaml:"sync"`
+	Redis        RedisConfig  `yaml:"redis"`
 }
 
 var GlobalConfig *AppConfig

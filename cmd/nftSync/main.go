@@ -2,9 +2,15 @@ package main
 
 import (
 	"context"
+	"github.com/gavin/nftSync/internal/api"
 	"github.com/gavin/nftSync/internal/blockchain"
 	"github.com/gavin/nftSync/internal/config"
+	"github.com/gavin/nftSync/internal/middleware"
+	"github.com/gavin/nftSync/internal/model"
 	"github.com/gavin/nftSync/internal/service"
+	"github.com/gin-gonic/gin"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 	"log"
 	"time"
 )
@@ -14,6 +20,38 @@ func main() {
 	if err != nil {
 		log.Fatalf("配置加载失败: %v", err)
 	}
+
+	// 初始化 MySQL
+	db, err := gorm.Open(mysql.Open(cfg.DatabaseDSN), &gorm.Config{})
+	if err != nil {
+		log.Fatalf("数据库连接失败: %v", err)
+	}
+	if err := db.AutoMigrate(&model.NFT{}, &model.Item{}); err != nil {
+		log.Fatalf("表结构迁移失败: %v", err)
+	}
+	db.AutoMigrate(&model.NFT{}, &model.Item{})
+
+	// 初始化 Redis
+	service.InitRedis(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB) // 可从 cfg 读取
+
+	// 创建 NFTService 实例
+	nftService := &service.NFTService{DB: db}
+
+	// 启动 Gin Web 服务，集成业务中间件
+	go func() {
+		// 推荐使用 gin.New()，避免重复注册默认中间件
+		middleware.InitLogger() // 初始化 zap 日志
+		r := gin.New()
+		// 注册业务中间件
+		r.Use(middleware.ZapLogger())
+		r.Use(middleware.ZapRecovery())
+		// 不再全局注册 AuthMiddleware
+		api.RegisterNFTApi(r, nftService)
+		if err := r.Run(":8080"); err != nil {
+			log.Fatalf("API服务启动失败: %v", err)
+		}
+	}()
+
 	clients, names, err := blockchain.NewEthClientsFromConfig(cfg)
 	if err != nil {
 		log.Fatalf("节点初始化失败: %v", err)
