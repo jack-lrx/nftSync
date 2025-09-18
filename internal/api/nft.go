@@ -1,8 +1,6 @@
 package api
 
 import (
-	"github.com/gavin/nftSync/internal/middleware"
-	"github.com/gavin/nftSync/internal/model"
 	"github.com/gavin/nftSync/internal/service"
 	"github.com/gin-gonic/gin"
 	"net/http"
@@ -15,31 +13,22 @@ type NFTDetailRequest struct {
 	TokenID  string `form:"token_id" binding:"required"`
 }
 type NFTDetailResponse struct {
-	Data  *model.NFT `json:"data,omitempty"`
-	Error string     `json:"error,omitempty"`
+	Data  *service.NFTDetailDTO `json:"data,omitempty"`
+	Error string                `json:"error,omitempty"`
 }
 
 type NFTListRequest struct {
 	Owner string `form:"owner" binding:"required"`
 }
 type NFTListResponse struct {
-	Data  []model.NFT `json:"data,omitempty"`
-	Error string      `json:"error,omitempty"`
+	Data  []service.NFTDetailDTO `json:"data,omitempty"`
+	Error string                 `json:"error,omitempty"`
 }
 
 // NFTApi 提供 NFT 查询接口
 
 type NFTApi struct {
 	Service *service.NFTService
-}
-
-// 注册路由
-func RegisterNFTApi(r *gin.Engine, svc *service.NFTService) {
-	api := &NFTApi{Service: svc}
-	// 需要权限的接口单独注册 AuthMiddleware
-	r.GET("/api/nft/detail", middleware.AuthMiddleware(), api.GetNFTDetail)
-	r.GET("/api/nft/list", middleware.AuthMiddleware(), api.GetNFTListByOwner)
-	// 可在此注册无需权限的公开接口
 }
 
 // 查询 NFT 详情

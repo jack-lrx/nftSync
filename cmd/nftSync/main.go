@@ -5,8 +5,8 @@ import (
 	"github.com/gavin/nftSync/internal/api"
 	"github.com/gavin/nftSync/internal/blockchain"
 	"github.com/gavin/nftSync/internal/config"
+	"github.com/gavin/nftSync/internal/dao"
 	"github.com/gavin/nftSync/internal/middleware"
-	"github.com/gavin/nftSync/internal/model"
 	"github.com/gavin/nftSync/internal/service"
 	"github.com/gin-gonic/gin"
 	"gorm.io/driver/mysql"
@@ -26,16 +26,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("数据库连接失败: %v", err)
 	}
-	if err := db.AutoMigrate(&model.NFT{}, &model.Item{}); err != nil {
+	if err := db.AutoMigrate(&dao.NFT{}, &dao.Item{}); err != nil {
 		log.Fatalf("表结构迁移失败: %v", err)
 	}
-	db.AutoMigrate(&model.NFT{}, &model.Item{})
+	db.AutoMigrate(&dao.NFT{}, &dao.Item{})
 
 	// 初始化 Redis
 	service.InitRedis(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB) // 可从 cfg 读取
 
 	// 创建 NFTService 实例
-	nftService := &service.NFTService{DB: db}
+	nftService := &service.NFTService{Repo: &dao.NFTRepository{DB: db}}
 
 	// 启动 Gin Web 服务，集成业务中间件
 	go func() {
@@ -45,8 +45,26 @@ func main() {
 		// 注册业务中间件
 		r.Use(middleware.ZapLogger())
 		r.Use(middleware.ZapRecovery())
-		// 不再全局注册 AuthMiddleware
-		api.RegisterNFTApi(r, nftService)
+
+		apiGroup := r.Group("/api")
+		// 注册nft相关接口，添加权限校验
+		nftGroup := apiGroup.Group("/nft")
+		apiObj := &api.NFTApi{Service: nftService}
+		// 需要权限的接口单独注册 AuthMiddleware
+		nftGroup.GET("/detail", middleware.AuthMiddleware(), apiObj.GetNFTDetail)
+		nftGroup.GET("/list", middleware.AuthMiddleware(), apiObj.GetNFTListByOwner)
+
+		// 注册订单相关接口，添加权限校验
+		orderGroup := apiGroup.Group("/order")
+		orderGroup.Use(middleware.AuthMiddleware())
+		orderGroup.GET(":id", api.GetOrderHandler)
+		orderGroup.GET("/list", api.ListUserOrdersHandler)
+
+		// 注册用户相关接口，无需权限校验
+		userGroup := apiGroup.Group("/user")
+		userGroup.POST("/register", api.RegisterUserHandler)
+		userGroup.POST("/login", api.LoginUserHandler)
+
 		if err := r.Run(":8080"); err != nil {
 			log.Fatalf("API服务启动失败: %v", err)
 		}

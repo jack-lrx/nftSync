@@ -37,9 +37,11 @@ CREATE INDEX idx_items_trait_type ON items(trait_type);
 CREATE TABLE orders (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     nft_id BIGINT NOT NULL,
+    nft_token VARCHAR(128) NOT NULL,
     seller VARCHAR(128) NOT NULL,
+    buyer VARCHAR(128),
     price VARCHAR(64) NOT NULL,
-    status VARCHAR(32) NOT NULL, -- pending, completed, cancelled
+    status VARCHAR(32) NOT NULL, -- listed, matched, completed, cancelled
     created_at BIGINT,
     updated_at BIGINT,
     deleted_at BIGINT,
@@ -47,6 +49,7 @@ CREATE TABLE orders (
 );
 CREATE INDEX idx_orders_nft_id ON orders(nft_id);
 CREATE INDEX idx_orders_seller ON orders(seller);
+CREATE INDEX idx_orders_buyer ON orders(buyer);
 CREATE INDEX idx_orders_status ON orders(status);
 
 -- 交易表（可选，示例）

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"github.com/gavin/nftSync/internal/blockchain"
 	"github.com/gavin/nftSync/internal/config"
-	"github.com/gavin/nftSync/internal/model"
+	"github.com/gavin/nftSync/internal/dao"
 	"gorm.io/gorm"
 	"io/ioutil"
 	"log"
@@ -129,16 +129,16 @@ func processMintEvent(mevt blockchain.MultiNodeTransferEvent, contract string, s
 		log.Printf("元数据获取失败: %v", err)
 		return
 	}
-	items := []model.Item{}
+	items := []dao.Item{}
 	for _, attr := range meta.Attributes {
-		items = append(items, model.Item{
+		items = append(items, dao.Item{
 			Name:      meta.Name,
 			TraitType: attr.TraitType,
 			Value:     attr.Value,
 		})
 	}
 	metaJson, _ := json.Marshal(meta)
-	nft := model.NFT{
+	nft := dao.NFT{
 		TokenID:     mevt.Event.TokenID,
 		Contract:    mevt.Event.Contract,
 		Owner:       mevt.Event.To,
@@ -152,7 +152,7 @@ func processMintEvent(mevt blockchain.MultiNodeTransferEvent, contract string, s
 	}
 	log.Printf("铸造NFT: %+v, Items: %+v", nft, nft.Items)
 	if s.db != nil {
-		repo := &model.NFTRepository{DB: s.db}
+		repo := &dao.NFTRepository{DB: s.db}
 		err := s.db.Transaction(func(tx *gorm.DB) error {
 			return repo.SaveOrUpdateNFT(tx, &nft)
 		})

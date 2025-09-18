@@ -1,4 +1,4 @@
-package model
+package dao
 
 import "gorm.io/gorm"
 
@@ -81,4 +81,24 @@ func (r *NFTRepository) SaveOrUpdateNFT(tx *gorm.DB, nft *NFT) error {
 		return result.Error
 	}
 	return nil
+}
+
+// 查询 NFT 详情
+func (r *NFTRepository) GetNFTDetail(contract, tokenID string) (*NFT, error) {
+	var nft NFT
+	err := r.DB.Preload("Items").Where("contract = ? AND token_id = ?", contract, tokenID).First(&nft).Error
+	if err != nil {
+		return nil, err
+	}
+	return &nft, nil
+}
+
+// 查询 owner 的所有 NFT
+func (r *NFTRepository) GetNFTListByOwner(owner string) ([]NFT, error) {
+	var nfts []NFT
+	err := r.DB.Preload("Items").Where("owner = ?", owner).Find(&nfts).Error
+	if err != nil {
+		return nil, err
+	}
+	return nfts, nil
 }
