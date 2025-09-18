@@ -6,6 +6,10 @@ import (
 	"net/http"
 )
 
+type UserApi struct {
+	Service *service.UserService
+}
+
 // 注册请求结构体
 // POST /api/user/register
 // {"email":"xxx", "password":"xxx", "wallet_addr":"xxx"}
@@ -20,17 +24,19 @@ type RegisterUserResp struct {
 	Error   string `json:"error,omitempty"`
 }
 
-func RegisterUserHandler(c *gin.Context) {
-	var req RegisterUserReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, RegisterUserResp{Success: false, Error: "参数错误"})
-		return
+func RegisterUserHandler(a *UserApi) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req RegisterUserReq
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, RegisterUserResp{Success: false, Error: "参数错误"})
+			return
+		}
+		if err := a.Service.RegisterUser(req.Email, req.Password, req.WalletAddr); err != nil {
+			c.JSON(http.StatusBadRequest, RegisterUserResp{Success: false, Error: err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, RegisterUserResp{Success: true})
 	}
-	if err := service.RegisterUser(req.Email, req.Password, req.WalletAddr); err != nil {
-		c.JSON(http.StatusBadRequest, RegisterUserResp{Success: false, Error: err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, RegisterUserResp{Success: true})
 }
 
 // 登录请求结构体
@@ -47,16 +53,47 @@ type LoginUserResp struct {
 	Error   string `json:"error,omitempty"`
 }
 
-func LoginUserHandler(c *gin.Context) {
-	var req LoginUserReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, LoginUserResp{Success: false, Error: "参数错误"})
-		return
+func LoginUserHandler(a *UserApi) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req LoginUserReq
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, LoginUserResp{Success: false, Error: "参数错误"})
+			return
+		}
+		user, err := a.Service.LoginUser(req.Email, req.Password)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, LoginUserResp{Success: false, Error: err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, LoginUserResp{Success: true, UserID: user.ID})
 	}
-	user, err := service.LoginUser(req.Email, req.Password)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, LoginUserResp{Success: false, Error: err.Error()})
-		return
+}
+
+// 用户存在性查询请求结构体
+// GET /api/user/exists?email=xxx 或 /api/user/exists?wallet_addr=xxx
+
+type UserExistsReq struct {
+	Email      string `form:"email"`
+	WalletAddr string `form:"wallet_addr"`
+}
+
+type UserExistsResp struct {
+	Exists bool   `json:"exists"`
+	Error  string `json:"error,omitempty"`
+}
+
+func UserExistsHandler(a *UserApi) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req UserExistsReq
+		if err := c.ShouldBindQuery(&req); err != nil {
+			c.JSON(http.StatusBadRequest, UserExistsResp{Exists: false, Error: "参数错误"})
+			return
+		}
+		exists, err := a.Service.UserExists(req.Email, req.WalletAddr)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, UserExistsResp{Exists: false, Error: err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, UserExistsResp{Exists: exists})
 	}
-	c.JSON(http.StatusOK, LoginUserResp{Success: true, UserID: user.ID})
 }

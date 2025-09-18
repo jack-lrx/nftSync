@@ -37,6 +37,11 @@ func main() {
 	// 创建 NFTService 实例
 	nftService := &service.NFTService{Repo: &dao.NFTRepository{DB: db}}
 
+	// 创建 UserService 实例
+	userRepo := &dao.UserRepository{DB: db}
+	userService := &service.UserService{Repo: userRepo}
+	userApi := &api.UserApi{Service: userService}
+
 	// 启动 Gin Web 服务，集成业务中间件
 	go func() {
 		// 推荐使用 gin.New()，避免重复注册默认中间件
@@ -62,8 +67,9 @@ func main() {
 
 		// 注册用户相关接口，无需权限校验
 		userGroup := apiGroup.Group("/user")
-		userGroup.POST("/register", api.RegisterUserHandler)
-		userGroup.POST("/login", api.LoginUserHandler)
+		userGroup.POST("/register", api.RegisterUserHandler(userApi))
+		userGroup.POST("/login", api.LoginUserHandler(userApi))
+		userGroup.GET("/exists", api.UserExistsHandler(userApi))
 
 		if err := r.Run(":8080"); err != nil {
 			log.Fatalf("API服务启动失败: %v", err)
