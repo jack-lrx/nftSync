@@ -42,6 +42,11 @@ func main() {
 	userService := &service.UserService{Repo: userRepo}
 	userApi := &api.UserApi{Service: userService}
 
+	// 创建 OrderService 实例
+	orderRepo := &dao.OrderRepository{DB: db}
+	orderService := &service.OrderService{Repo: orderRepo}
+	orderApi := &api.OrderApi{Service: orderService}
+
 	// 启动 Gin Web 服务，集成业务中间件
 	go func() {
 		// 推荐使用 gin.New()，避免重复注册默认中间件
@@ -62,8 +67,8 @@ func main() {
 		// 注册订单相关接口，添加权限校验
 		orderGroup := apiGroup.Group("/order")
 		orderGroup.Use(middleware.AuthMiddleware())
-		orderGroup.GET(":id", api.GetOrderHandler)
-		orderGroup.GET("/list", api.ListUserOrdersHandler)
+		orderGroup.GET(":id", api.GetOrderHandler(orderApi))
+		orderGroup.GET("/list", api.ListUserOrdersHandler(orderApi))
 
 		// 注册用户相关接口，无需权限校验
 		userGroup := apiGroup.Group("/user")

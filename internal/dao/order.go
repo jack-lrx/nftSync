@@ -2,6 +2,8 @@ package dao
 
 import (
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // OrderStatus 订单状态枚举
@@ -26,37 +28,59 @@ type Order struct {
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
-// DAO 方法定义
-func CreateOrder(order *Order) error {
-	// TODO: 实现数据库插入逻辑
-	return nil
+// OrderRepository 订单数据访问对象
+// 用于分层管理订单持久化逻辑，风格参考NFTRepository
+// 使用方法：repo := &OrderRepository{DB: db}
+type OrderRepository struct {
+	DB *gorm.DB
 }
 
-func GetOrder(id int64) (*Order, error) {
-	// TODO: 实现数据库查询逻辑
-	return nil, nil
+// 创建订单
+func (r *OrderRepository) CreateOrder(order *Order) error {
+	return r.DB.Create(order).Error
 }
 
-func UpdateOrderStatus(id int64, status string) error {
-	// TODO: 实现数据库更新逻辑
-	return nil
+// 查询订单详情
+func (r *OrderRepository) GetOrder(id int64) (*Order, error) {
+	var order Order
+	if err := r.DB.Where("id = ?", id).First(&order).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &order, nil
 }
 
-func ListOrders(nftID int64, status string) ([]*Order, error) {
-	// TODO: 实现数据库批量查询逻辑
-	return nil, nil
+// 更新订单状态
+func (r *OrderRepository) UpdateOrderStatus(id int64, status string) error {
+	return r.DB.Model(&Order{}).Where("id = ?", id).Update("status", status).Error
+}
+
+// 批量查询订单（按NFT和状态）
+func (r *OrderRepository) ListOrders(nftID int64, status string) ([]Order, error) {
+	var orders []Order
+	if err := r.DB.Where("nft_id = ? AND status = ?", nftID, status).Find(&orders).Error; err != nil {
+		return nil, err
+	}
+	return orders, nil
 }
 
 // 原子撮合订单，更新状态为matched，记录买家和时间
-func UpdateOrderMatched(id int64, buyer string) error {
-	// TODO: 实现数据库原子更新逻辑
-	// UPDATE orders SET status='matched', buyer=?, updated_at=? WHERE id=? AND status='listed'
-	return nil
+func (r *OrderRepository) UpdateOrderMatched(id int64, buyer string) error {
+	return r.DB.Model(&Order{}).Where("id = ? AND status = ?", id, OrderStatusListed).
+		Updates(map[string]interface{}{
+			"status":     OrderStatusMatched,
+			"buyer":      buyer,
+			"updated_at": gorm.Expr("NOW()"),
+		}).Error
 }
 
-// 用户订单列表查询，按 owner 查询
-func ListUserOrders(owner string) ([]*Order, error) {
-	// TODO: 实现数据库查询逻辑
-	// SELECT * FROM orders WHERE seller=? OR buyer=?
-	return nil, nil
+// 用户订单列表查询，按 owner 查询（卖家或买家）
+func (r *OrderRepository) ListUserOrders(owner string) ([]Order, error) {
+	var orders []Order
+	if err := r.DB.Where("seller = ? OR buyer = ?", owner, owner).Find(&orders).Error; err != nil {
+		return nil, err
+	}
+	return orders, nil
 }

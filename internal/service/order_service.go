@@ -5,13 +5,31 @@ import (
 	"time"
 )
 
+// OrderService 订单服务
+type OrderService struct {
+	Repo *dao.OrderRepository
+}
+
 // GetOrder 查询订单，直接返回 DTO
-func GetOrder(orderID int64) (*OrderDTO, error) {
-	order, err := dao.GetOrder(orderID)
+func (s *OrderService) GetOrder(orderID int64) (*OrderDTO, error) {
+	order, err := s.Repo.GetOrder(orderID)
 	if err != nil {
 		return nil, err
 	}
-	return ToOrderDTO(order), nil
+	return s.ToOrderDTO(order), nil
+}
+
+// ListUserOrders 用户订单列表查询，按 owner 查询
+func (s *OrderService) ListUserOrders(owner string) ([]OrderDTO, error) {
+	orders, err := s.Repo.ListUserOrders(owner)
+	if err != nil {
+		return nil, err
+	}
+	res := make([]OrderDTO, 0, len(orders))
+	for i := range orders {
+		res = append(res, *s.ToOrderDTO(&orders[i]))
+	}
+	return res, nil
 }
 
 // OrderDTO 用于安全输出订单信息
@@ -29,7 +47,7 @@ type OrderDTO struct {
 }
 
 // ToOrderDTO 将 dao.Order 转换为 OrderDTO
-func ToOrderDTO(order *dao.Order) *OrderDTO {
+func (s *OrderService) ToOrderDTO(order *dao.Order) *OrderDTO {
 	if order == nil {
 		return nil
 	}
@@ -44,19 +62,4 @@ func ToOrderDTO(order *dao.Order) *OrderDTO {
 		CreatedAt: order.CreatedAt,
 		UpdatedAt: order.UpdatedAt,
 	}
-}
-
-// 用户订单列表查询，按 owner 查询
-func ListUserOrders(owner string) ([]OrderDTO, error) {
-	orders, err := dao.ListUserOrders(owner)
-	if err != nil {
-		return nil, err
-	}
-	res := make([]OrderDTO, 0, len(orders))
-	for _, order := range orders {
-		if order != nil {
-			res = append(res, *ToOrderDTO(order))
-		}
-	}
-	return res, nil
 }

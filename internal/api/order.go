@@ -14,22 +14,24 @@ type GetOrderResp struct {
 }
 
 // 查询接口
-func GetOrderHandler(c *gin.Context) {
-	orderIDStr := c.Param("id")
-	orderID, err := strconv.ParseInt(orderIDStr, 10, 64)
-	if err != nil {
-		resp := GetOrderResp{Error: "invalid order id"}
-		c.JSON(http.StatusBadRequest, resp)
-		return
+func GetOrderHandler(a *OrderApi) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		orderIDStr := c.Param("id")
+		orderID, err := strconv.ParseInt(orderIDStr, 10, 64)
+		if err != nil {
+			resp := GetOrderResp{Error: "invalid order id"}
+			c.JSON(http.StatusBadRequest, resp)
+			return
+		}
+		order, err := a.Service.GetOrder(orderID)
+		if err != nil {
+			resp := GetOrderResp{Error: err.Error()}
+			c.JSON(http.StatusNotFound, resp)
+			return
+		}
+		resp := GetOrderResp{Order: order}
+		c.JSON(http.StatusOK, resp)
 	}
-	order, err := service.GetOrder(orderID)
-	if err != nil {
-		resp := GetOrderResp{Error: err.Error()}
-		c.JSON(http.StatusNotFound, resp)
-		return
-	}
-	resp := GetOrderResp{Order: order}
-	c.JSON(http.StatusOK, resp)
 }
 
 // 用户订单列表查询请求结构体
@@ -46,19 +48,25 @@ type ListUserOrdersResp struct {
 }
 
 // 用户订单列表查询接口
-func ListUserOrdersHandler(c *gin.Context) {
-	var req ListUserOrdersReq
-	if err := c.ShouldBindQuery(&req); err != nil {
-		resp := ListUserOrdersResp{Error: "owner参数必填"}
-		c.JSON(http.StatusBadRequest, resp)
-		return
+func ListUserOrdersHandler(a *OrderApi) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req ListUserOrdersReq
+		if err := c.ShouldBindQuery(&req); err != nil {
+			resp := ListUserOrdersResp{Error: "owner参数必填"}
+			c.JSON(http.StatusBadRequest, resp)
+			return
+		}
+		orders, err := a.Service.ListUserOrders(req.Owner)
+		if err != nil {
+			resp := ListUserOrdersResp{Error: err.Error()}
+			c.JSON(http.StatusInternalServerError, resp)
+			return
+		}
+		resp := ListUserOrdersResp{Orders: orders}
+		c.JSON(http.StatusOK, resp)
 	}
-	orders, err := service.ListUserOrders(req.Owner)
-	if err != nil {
-		resp := ListUserOrdersResp{Error: err.Error()}
-		c.JSON(http.StatusInternalServerError, resp)
-		return
-	}
-	resp := ListUserOrdersResp{Orders: orders}
-	c.JSON(http.StatusOK, resp)
+}
+
+type OrderApi struct {
+	Service *service.OrderService
 }
