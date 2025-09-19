@@ -15,36 +15,10 @@ import (
 	"strings"
 )
 
-// SyncService 用于同步NFT数据
-type SyncService struct {
-	eth             *blockchain.EthClient
-	lastSyncedBlock *big.Int // 记录已同步的区块高度
-	// db *gorm.DB // 可扩展数据库连接
-}
-
-func NewSyncService(eth *blockchain.EthClient) *SyncService {
-	return &SyncService{
-		eth:             eth,
-		lastSyncedBlock: big.NewInt(0), // 初始化为0，可持久化
-	}
-}
-
 // 多节点同步服务结构体
-type MultiNodeSyncService struct {
-	MultiNode       *blockchain.MultiNodeEthClient
-	lastSyncedBlock *big.Int
-	db              *gorm.DB // 可扩展数据库连接
-}
-
-func NewMultiNodeSyncService(multiNode *blockchain.MultiNodeEthClient) *MultiNodeSyncService {
-	return &MultiNodeSyncService{
-		MultiNode:       multiNode,
-		lastSyncedBlock: big.NewInt(0),
-	}
-}
 
 // 实时监听铸造事件（Transfer from=0x0）
-func (s *MultiNodeSyncService) SyncMintEventsRealtime(ctx context.Context) {
+func (s *MultiNodeSyncService) SyncMintEventsRealtime(ctx context.Context, bizCtx *config.Context) {
 	latestBlock := getLatestBlock(s.MultiNode, ctx)
 	if latestBlock == nil {
 		log.Printf("无法获取最新区块")
@@ -52,7 +26,7 @@ func (s *MultiNodeSyncService) SyncMintEventsRealtime(ctx context.Context) {
 	}
 	startBlock := new(big.Int).Set(latestBlock)
 	// 合约地址直接用全局配置
-	nftContracts := config.GlobalConfig.NFTContracts
+	nftContracts := bizCtx.Config.NFTContracts
 	for _, contract := range nftContracts {
 		multiEvents := s.MultiNode.FetchTransferEventsAllNodes(contract, startBlock, startBlock, ctx)
 		for _, mevt := range multiEvents {
@@ -65,20 +39,20 @@ func (s *MultiNodeSyncService) SyncMintEventsRealtime(ctx context.Context) {
 }
 
 // 定时轮询补全铸造事件（区块范围轮询）
-func (s *MultiNodeSyncService) SyncMintEventsPolling(ctx context.Context) {
+func (s *MultiNodeSyncService) SyncMintEventsPolling(ctx context.Context, bizCtx *config.Context) {
 	latestBlock := getLatestBlock(s.MultiNode, ctx)
 	if latestBlock == nil {
 		log.Printf("无法获取最新区块")
 		return
 	}
 	startBlock := new(big.Int).Add(s.lastSyncedBlock, big.NewInt(1))
-	confirmBlocks := config.GlobalConfig.Sync.ConfirmBlocks
+	confirmBlocks := bizCtx.Config.Sync.ConfirmBlocks
 	safeBlock := new(big.Int).Sub(latestBlock, big.NewInt(int64(confirmBlocks)))
 	if safeBlock.Cmp(startBlock) < 0 {
 		log.Println("无新区块达到安全确认高度，无需轮询")
 		return
 	}
-	nftContracts := config.GlobalConfig.NFTContracts
+	nftContracts := bizCtx.Config.NFTContracts
 	for _, contract := range nftContracts {
 		multiEvents := s.MultiNode.FetchTransferEventsAllNodes(contract, startBlock, safeBlock, ctx)
 		for _, mevt := range multiEvents {
@@ -151,10 +125,9 @@ func processMintEvent(mevt blockchain.MultiNodeTransferEvent, contract string, s
 		SourceNodes: strings.Join(mevt.SourceNodes, ","),
 	}
 	log.Printf("铸造NFT: %+v, Items: %+v", nft, nft.Items)
-	if s.db != nil {
-		repo := &dao.NFTRepository{DB: s.db}
-		err := s.db.Transaction(func(tx *gorm.DB) error {
-			return repo.SaveOrUpdateNFT(tx, &nft)
+	if s.Dao.DB != nil {
+		err := s.Dao.DB.Transaction(func(tx *gorm.DB) error {
+			return s.Dao.SaveOrUpdateNFT(&nft)
 		})
 		if err != nil {
 			log.Printf("NFT保存失败: %v", err)

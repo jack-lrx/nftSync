@@ -39,6 +39,8 @@ type TransferEvent struct {
 	To          string
 	Contract    string
 	BlockNumber uint64
+	TxHash      string
+	BlockTime   int64
 }
 
 // ERC721 Transfer事件的topic
@@ -61,12 +63,19 @@ func (e *EthClient) FetchTransferEvents(ctx context.Context, contract string, st
 		if len(vLog.Topics) != 4 {
 			continue // ERC721 Transfer事件应有4个topic
 		}
+		block, err := e.client.BlockByNumber(ctx, big.NewInt(int64(vLog.BlockNumber)))
+		var blockTime int64
+		if err == nil {
+			blockTime = int64(block.Time())
+		}
 		event := TransferEvent{
 			From:        common.HexToAddress(vLog.Topics[1].Hex()).Hex(),
 			To:          common.HexToAddress(vLog.Topics[2].Hex()).Hex(),
 			TokenID:     vLog.Topics[3].Hex(),
 			Contract:    vLog.Address.Hex(),
 			BlockNumber: vLog.BlockNumber,
+			TxHash:      vLog.TxHash.Hex(),
+			BlockTime:   blockTime,
 		}
 		events = append(events, event)
 	}
@@ -85,6 +94,29 @@ func (e *EthClient) GetTokenURI(ctx context.Context, contract string, tokenId *b
 		return "", err
 	}
 	return uri, nil
+}
+
+type OrderFilledEvent struct {
+	TokenID     string
+	Seller      string
+	Buyer       string
+	Price       float64
+	Fee         float64
+	Contract    string
+	BlockNumber uint64
+	TxHash      string
+	BlockTime   int64
+}
+
+// FetchOrderFilledEvents 拉取市场合约的订单成交事件（接口/伪代码，需结合ABI实现）
+func (e *EthClient) FetchOrderFilledEvents(ctx context.Context, contract string, startBlock, endBlock *big.Int) ([]OrderFilledEvent, error) {
+	// TODO: 结合市场合约ABI，监听OrderFilled/Sale事件，解析price、fee、tokenId、seller、buyer等字段
+	// 1. 构造 FilterQuery，监听市场合约的OrderFilled/Sale事件topic
+	// 2. 解析logs，使用ABI解码data字段，提取price、fee
+	// 3. 解析topics，提取tokenId、seller、buyer
+	// 4. 组装OrderFilledEvent
+	// 5. 返回事件列表
+	return nil, nil
 }
 
 // TODO: 添加事件监听与合约交互方法

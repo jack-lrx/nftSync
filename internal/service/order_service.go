@@ -5,14 +5,9 @@ import (
 	"time"
 )
 
-// OrderService 订单服务
-type OrderService struct {
-	Repo *dao.OrderRepository
-}
-
 // GetOrder 查询订单，直接返回 DTO
-func (s *OrderService) GetOrder(orderID int64) (*OrderDTO, error) {
-	order, err := s.Repo.GetOrder(orderID)
+func (s *Service) GetOrder(orderID int64) (*OrderDTO, error) {
+	order, err := s.Dao.GetOrder(orderID)
 	if err != nil {
 		return nil, err
 	}
@@ -20,8 +15,8 @@ func (s *OrderService) GetOrder(orderID int64) (*OrderDTO, error) {
 }
 
 // ListUserOrders 用户订单列表查询，按 owner 查询
-func (s *OrderService) ListUserOrders(owner string) ([]OrderDTO, error) {
-	orders, err := s.Repo.ListUserOrders(owner)
+func (s *Service) ListUserOrders(owner string) ([]OrderDTO, error) {
+	orders, err := s.Dao.ListUserOrders(owner)
 	if err != nil {
 		return nil, err
 	}
@@ -44,10 +39,11 @@ type OrderDTO struct {
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	Fee       float64   `json:"fee"`
 }
 
 // ToOrderDTO 将 dao.Order 转换为 OrderDTO
-func (s *OrderService) ToOrderDTO(order *dao.Order) *OrderDTO {
+func (s *Service) ToOrderDTO(order *dao.Order) *OrderDTO {
 	if order == nil {
 		return nil
 	}

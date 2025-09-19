@@ -13,6 +13,7 @@ type SyncConfig struct {
 	RealtimeInterval int `yaml:"realtime_interval"`
 	PollingInterval  int `yaml:"polling_interval"`
 	ConfirmBlocks    int `yaml:"confirm_blocks"`
+	OrderInterval    int `yaml:"order_interval"`
 }
 type RedisConfig struct {
 	Addr     string `yaml:"addr"`
@@ -20,15 +21,19 @@ type RedisConfig struct {
 	DB       int    `yaml:"db"`
 }
 type AppConfig struct {
-	EthNodes     []NodeConfig `yaml:"eth_nodes"`
-	DatabaseDSN  string       `yaml:"database.dsn"`
-	APIPort      int          `yaml:"api.port"`
-	NFTContracts []string     `yaml:"nft_contracts"`
-	Sync         SyncConfig   `yaml:"sync"`
-	Redis        RedisConfig  `yaml:"redis"`
+	EthNodes       []NodeConfig `yaml:"eth_nodes"`
+	DatabaseDSN    string       `yaml:"database.dsn"`
+	APIPort        int          `yaml:"api.port"`
+	NFTContracts   []string     `yaml:"nft_contracts"`
+	OrderContracts []string     `yaml:"order_contracts"`
+	Sync           SyncConfig   `yaml:"sync"`
+	Redis          RedisConfig  `yaml:"redis"`
 }
 
-var GlobalConfig *AppConfig
+type NotifyConfig struct {
+	WebhookURL string `yaml:"webhook_url"`
+	MQTopic    string `yaml:"mq_topic"`
+}
 
 func LoadAppConfig(path string) (*AppConfig, error) {
 	data, err := os.ReadFile(path)
@@ -39,6 +44,5 @@ func LoadAppConfig(path string) (*AppConfig, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
-	GlobalConfig = &cfg
-	return GlobalConfig, nil
+	return &cfg, nil
 }

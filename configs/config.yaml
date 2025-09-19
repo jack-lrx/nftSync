@@ -14,10 +14,15 @@ nft_contracts:
   - "0xNFTContractAddress1"
   - "0xNFTContractAddress2"
   - "0xNFTContractAddress3"
+order_contracts:
+  - "0xOrderContractAddress1"
+  - "0xOrderContractAddress2"
+  - "0xOrderContractAddress3"
 sync:
   realtime_interval: 5    # 实时监听任务间隔（秒）
   polling_interval: 72    # 补偿轮询任务间隔（秒），建议6块确认
   confirm_blocks: 6       # 事件最终确认所需区块数
+  order_interval: 60      # 订单同步轮询周期（秒）
 redis:
   addr: "localhost:6379"
   password: ""

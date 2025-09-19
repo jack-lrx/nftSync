@@ -32,24 +32,16 @@ type NFT struct {
 	SourceNodes string         `gorm:"type:text"`     // 来源节点（逗号分隔）
 }
 
-// NFTRepository 封装 NFT 数据库操作
-// SaveOrUpdateNFT 支持查重、更新、插入、属性同步，所有操作在事务中完成
-
-// NFTRepository 用于分层管理 NFT 持久化逻辑
-// 使用方法：repo := &NFTRepository{DB: db}
-// repo.SaveOrUpdateNFT(tx, &nft)
-type NFTRepository struct {
-	DB *gorm.DB
-}
+// Dao 结构体已在 dao.go 定义
 
 // SaveOrUpdateNFT 保存或更新 NFT（带属性），所有操作在事务中完成
-func (r *NFTRepository) SaveOrUpdateNFT(tx *gorm.DB, nft *NFT) error {
+func (d *Dao) SaveOrUpdateNFT(nft *NFT) error {
 	var oldNFT NFT
-	result := tx.Where("token_id = ? AND contract = ?", nft.TokenID, nft.Contract).First(&oldNFT)
+	result := d.DB.Where("token_id = ? AND contract = ?", nft.TokenID, nft.Contract).First(&oldNFT)
 	if result.Error == nil {
 		// 已存在，更新主表和属性
 		nft.ID = oldNFT.ID
-		if err := tx.Model(&oldNFT).Updates(map[string]interface{}{
+		if err := d.DB.Model(&oldNFT).Updates(map[string]interface{}{
 			"owner":        nft.Owner,
 			"token_uri":    nft.TokenURI,
 			"metadata":     nft.Metadata,
@@ -60,7 +52,7 @@ func (r *NFTRepository) SaveOrUpdateNFT(tx *gorm.DB, nft *NFT) error {
 			return err
 		}
 		// 删除旧属性
-		if err := tx.Where("nft_id = ?", oldNFT.ID).Delete(&Item{}).Error; err != nil {
+		if err := d.DB.Where("nft_id = ?", oldNFT.ID).Delete(&Item{}).Error; err != nil {
 			return err
 		}
 		// 插入新属性
@@ -68,13 +60,13 @@ func (r *NFTRepository) SaveOrUpdateNFT(tx *gorm.DB, nft *NFT) error {
 			nft.Items[i].NFTID = oldNFT.ID
 		}
 		if len(nft.Items) > 0 {
-			if err := tx.Create(&nft.Items).Error; err != nil {
+			if err := d.DB.Create(&nft.Items).Error; err != nil {
 				return err
 			}
 		}
 	} else if result.Error == gorm.ErrRecordNotFound {
 		// 不存在，插入主表和属性
-		if err := tx.Create(nft).Error; err != nil {
+		if err := d.DB.Create(nft).Error; err != nil {
 			return err
 		}
 	} else {
@@ -84,9 +76,9 @@ func (r *NFTRepository) SaveOrUpdateNFT(tx *gorm.DB, nft *NFT) error {
 }
 
 // 查询 NFT 详情
-func (r *NFTRepository) GetNFTDetail(contract, tokenID string) (*NFT, error) {
+func (d *Dao) GetNFTDetail(contract, tokenID string) (*NFT, error) {
 	var nft NFT
-	err := r.DB.Preload("Items").Where("contract = ? AND token_id = ?", contract, tokenID).First(&nft).Error
+	err := d.DB.Preload("Items").Where("contract = ? AND token_id = ?", contract, tokenID).First(&nft).Error
 	if err != nil {
 		return nil, err
 	}
@@ -94,9 +86,9 @@ func (r *NFTRepository) GetNFTDetail(contract, tokenID string) (*NFT, error) {
 }
 
 // 查询 owner 的所有 NFT
-func (r *NFTRepository) GetNFTListByOwner(owner string) ([]NFT, error) {
+func (d *Dao) GetNFTListByOwner(owner string) ([]NFT, error) {
 	var nfts []NFT
-	err := r.DB.Preload("Items").Where("owner = ?", owner).Find(&nfts).Error
+	err := d.DB.Preload("Items").Where("owner = ?", owner).Find(&nfts).Error
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"github.com/gavin/nftSync/internal/config"
+	"github.com/gavin/nftSync/internal/dao"
 	"github.com/gavin/nftSync/internal/service"
 	"github.com/gin-gonic/gin"
 	"net/http"
@@ -14,7 +16,7 @@ type GetOrderResp struct {
 }
 
 // 查询接口
-func GetOrderHandler(a *OrderApi) gin.HandlerFunc {
+func GetOrderHandler(ctx *config.Context) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		orderIDStr := c.Param("id")
 		orderID, err := strconv.ParseInt(orderIDStr, 10, 64)
@@ -48,7 +50,7 @@ type ListUserOrdersResp struct {
 }
 
 // 用户订单列表查询接口
-func ListUserOrdersHandler(a *OrderApi) gin.HandlerFunc {
+func ListUserOrdersHandler(ctx *config.Context) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req ListUserOrdersReq
 		if err := c.ShouldBindQuery(&req); err != nil {
@@ -56,7 +58,7 @@ func ListUserOrdersHandler(a *OrderApi) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, resp)
 			return
 		}
-		orders, err := a.Service.ListUserOrders(req.Owner)
+		orders, err := service.NewService(ctx).ListUserOrders(req.Owner)
 		if err != nil {
 			resp := ListUserOrdersResp{Error: err.Error()}
 			c.JSON(http.StatusInternalServerError, resp)
@@ -67,6 +69,66 @@ func ListUserOrdersHandler(a *OrderApi) gin.HandlerFunc {
 	}
 }
 
-type OrderApi struct {
-	Service *service.OrderService
+// 订单同步请求结构体
+// 可扩展为支持区块高度、时间范围等参数
+// POST /api/orders/sync
+
+type SyncOrdersReq struct {
+	Orders []service.OrderDTO `json:"orders" binding:"required"`
+}
+
+type SyncOrdersResp struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+}
+
+// 订单同步接口
+func SyncOrdersHandler(ctx *config.Context) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req SyncOrdersReq
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, SyncOrdersResp{Success: false, Error: "invalid request"})
+			return
+		}
+		// DTO 转 dao.Order
+		orders := make([]dao.Order, 0, len(req.Orders))
+		for _, dto := range req.Orders {
+			orders = append(orders, dao.Order{
+				ID:        dto.ID,
+				NFTID:     dto.NFTID,
+				NFTToken:  dto.NFTToken,
+				Seller:    dto.Seller,
+				Buyer:     dto.Buyer,
+				Price:     dto.Price,
+				Status:    dto.Status,
+				CreatedAt: dto.CreatedAt,
+				UpdatedAt: dto.UpdatedAt,
+			})
+		}
+		if err := service.NewService(ctx).SyncOrders(orders); err != nil {
+			c.JSON(http.StatusInternalServerError, SyncOrdersResp{Success: false, Error: err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, SyncOrdersResp{Success: true})
+	}
+}
+
+// 订单指标统计接口
+// GET /api/orders/stats
+
+type GetOrderStatsResp struct {
+	Total       int64   `json:"total"`
+	TotalAmount float64 `json:"total_amount"`
+	Error       string  `json:"error,omitempty"`
+}
+
+func GetOrderStatsHandler(ctx *config.Context) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		total, totalAmount, err := service.NewService(ctx).GetOrderStats()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, GetOrderStatsResp{Error: err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, GetOrderStatsResp{Total: total, TotalAmount: totalAmount})
+	}
 }

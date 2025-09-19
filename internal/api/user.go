@@ -1,13 +1,14 @@
 package api
 
 import (
+	"github.com/gavin/nftSync/internal/config"
 	"github.com/gavin/nftSync/internal/service"
 	"github.com/gin-gonic/gin"
 	"net/http"
 )
 
 type UserApi struct {
-	Service *service.UserService
+	Service *service.Service
 }
 
 // 注册请求结构体
@@ -24,14 +25,14 @@ type RegisterUserResp struct {
 	Error   string `json:"error,omitempty"`
 }
 
-func RegisterUserHandler(a *UserApi) gin.HandlerFunc {
+func RegisterUserHandler(ctx *config.Context) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req RegisterUserReq
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, RegisterUserResp{Success: false, Error: "参数错误"})
 			return
 		}
-		if err := a.Service.RegisterUser(req.Email, req.Password, req.WalletAddr); err != nil {
+		if err := service.NewService(ctx).RegisterUser(req.Email, req.Password, req.WalletAddr); err != nil {
 			c.JSON(http.StatusBadRequest, RegisterUserResp{Success: false, Error: err.Error()})
 			return
 		}
@@ -40,8 +41,6 @@ func RegisterUserHandler(a *UserApi) gin.HandlerFunc {
 }
 
 // 登录请求结构体
-// POST /api/user/login
-// {"email":"xxx", "password":"xxx"}
 type LoginUserReq struct {
 	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
@@ -53,14 +52,14 @@ type LoginUserResp struct {
 	Error   string `json:"error,omitempty"`
 }
 
-func LoginUserHandler(a *UserApi) gin.HandlerFunc {
+func LoginUserHandler(ctx *config.Context) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req LoginUserReq
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, LoginUserResp{Success: false, Error: "参数错误"})
 			return
 		}
-		user, err := a.Service.LoginUser(req.Email, req.Password)
+		user, err := service.NewService(ctx).LoginUser(req.Email, req.Password)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, LoginUserResp{Success: false, Error: err.Error()})
 			return
@@ -82,14 +81,14 @@ type UserExistsResp struct {
 	Error  string `json:"error,omitempty"`
 }
 
-func UserExistsHandler(a *UserApi) gin.HandlerFunc {
+func UserExistsHandler(ctx *config.Context) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req UserExistsReq
 		if err := c.ShouldBindQuery(&req); err != nil {
 			c.JSON(http.StatusBadRequest, UserExistsResp{Exists: false, Error: "参数错误"})
 			return
 		}
-		exists, err := a.Service.UserExists(req.Email, req.WalletAddr)
+		exists, err := service.NewService(ctx).UserExists(req.Email, req.WalletAddr)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, UserExistsResp{Exists: false, Error: err.Error()})
 			return

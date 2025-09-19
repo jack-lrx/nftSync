@@ -14,19 +14,16 @@ type User struct {
 	CreatedAt    time.Time `json:"created_at"`
 }
 
-// UserRepository 用户数据访问对象
+// Dao 用户数据访问对象
 // 推荐在 service 层注入 DB 实例，避免全局 DB
-type UserRepository struct {
-	DB *gorm.DB
-}
 
 // 创建用户
-func (r *UserRepository) CreateUser(user *User) error {
+func (r *Dao) CreateUser(user *User) error {
 	return r.DB.Create(user).Error
 }
 
 // 通过邮箱查找用户
-func (r *UserRepository) GetUserByEmail(email string) (*User, error) {
+func (r *Dao) GetUserByEmail(email string) (*User, error) {
 	var user User
 	if err := r.DB.Where("email = ?", email).First(&user).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -38,7 +35,7 @@ func (r *UserRepository) GetUserByEmail(email string) (*User, error) {
 }
 
 // 通过钱包地址查找用户
-func (r *UserRepository) GetUserByWallet(walletAddr string) (*User, error) {
+func (r *Dao) GetUserByWallet(walletAddr string) (*User, error) {
 	var user User
 	if err := r.DB.Where("wallet_addr = ?", walletAddr).First(&user).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -50,7 +47,7 @@ func (r *UserRepository) GetUserByWallet(walletAddr string) (*User, error) {
 }
 
 // 判断用户是否存在（支持邮箱或钱包地址）
-func (r *UserRepository) UserExists(email, walletAddr string) (bool, error) {
+func (r *Dao) UserExists(email, walletAddr string) (bool, error) {
 	if email != "" {
 		user, err := r.GetUserByEmail(email)
 		if err != nil {

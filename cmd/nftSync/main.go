@@ -3,51 +3,23 @@ package main
 import (
 	"context"
 	"github.com/gavin/nftSync/internal/api"
-	"github.com/gavin/nftSync/internal/blockchain"
 	"github.com/gavin/nftSync/internal/config"
-	"github.com/gavin/nftSync/internal/dao"
 	"github.com/gavin/nftSync/internal/middleware"
 	"github.com/gavin/nftSync/internal/service"
 	"github.com/gin-gonic/gin"
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
 	"log"
 	"time"
 )
 
 func main() {
-	cfg, err := config.LoadAppConfig("configs/config.yaml")
+	// 环境变量传递配置路径
+	configPath := "configs/config.yaml"
+	bizCtx, err := config.NewContext(configPath)
 	if err != nil {
-		log.Fatalf("配置加载失败: %v", err)
+		log.Fatalf("Context初始化失败: %v", err)
 	}
+	defer bizCtx.Close()
 
-	// 初始化 MySQL
-	db, err := gorm.Open(mysql.Open(cfg.DatabaseDSN), &gorm.Config{})
-	if err != nil {
-		log.Fatalf("数据库连接失败: %v", err)
-	}
-	if err := db.AutoMigrate(&dao.NFT{}, &dao.Item{}); err != nil {
-		log.Fatalf("表结构迁移失败: %v", err)
-	}
-	db.AutoMigrate(&dao.NFT{}, &dao.Item{})
-
-	// 初始化 Redis
-	service.InitRedis(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB) // 可从 cfg 读取
-
-	// 创建 NFTService 实例
-	nftService := &service.NFTService{Repo: &dao.NFTRepository{DB: db}}
-
-	// 创建 UserService 实例
-	userRepo := &dao.UserRepository{DB: db}
-	userService := &service.UserService{Repo: userRepo}
-	userApi := &api.UserApi{Service: userService}
-
-	// 创建 OrderService 实例
-	orderRepo := &dao.OrderRepository{DB: db}
-	orderService := &service.OrderService{Repo: orderRepo}
-	orderApi := &api.OrderApi{Service: orderService}
-
-	// 启动 Gin Web 服务，集成业务中间件
 	go func() {
 		// 推荐使用 gin.New()，避免重复注册默认中间件
 		middleware.InitLogger() // 初始化 zap 日志
@@ -59,52 +31,59 @@ func main() {
 		apiGroup := r.Group("/api")
 		// 注册nft相关接口，添加权限校验
 		nftGroup := apiGroup.Group("/nft")
-		apiObj := &api.NFTApi{Service: nftService}
 		// 需要权限的接口单独注册 AuthMiddleware
-		nftGroup.GET("/detail", middleware.AuthMiddleware(), apiObj.GetNFTDetail)
-		nftGroup.GET("/list", middleware.AuthMiddleware(), apiObj.GetNFTListByOwner)
+		nftGroup.GET("/detail", middleware.AuthMiddleware(), api.GetNFTDetail(bizCtx))
+		nftGroup.GET("/list", middleware.AuthMiddleware(), api.GetNFTListByOwner(bizCtx))
 
 		// 注册订单相关接口，添加权限校验
 		orderGroup := apiGroup.Group("/order")
 		orderGroup.Use(middleware.AuthMiddleware())
-		orderGroup.GET(":id", api.GetOrderHandler(orderApi))
-		orderGroup.GET("/list", api.ListUserOrdersHandler(orderApi))
+		orderGroup.GET(":id", api.GetOrderHandler(bizCtx))
+		orderGroup.GET("/list", api.ListUserOrdersHandler(bizCtx))
 
 		// 注册用户相关接口，无需权限校验
 		userGroup := apiGroup.Group("/user")
-		userGroup.POST("/register", api.RegisterUserHandler(userApi))
-		userGroup.POST("/login", api.LoginUserHandler(userApi))
-		userGroup.GET("/exists", api.UserExistsHandler(userApi))
+		userGroup.POST("/register", api.RegisterUserHandler(bizCtx))
+		userGroup.POST("/login", api.LoginUserHandler(bizCtx))
+		userGroup.GET("/exists", api.UserExistsHandler(bizCtx))
 
 		if err := r.Run(":8080"); err != nil {
 			log.Fatalf("API服务启动失败: %v", err)
 		}
 	}()
 
-	clients, names, err := blockchain.NewEthClientsFromConfig(cfg)
-	if err != nil {
-		log.Fatalf("节点初始化失败: %v", err)
-	}
-	multiNode := blockchain.NewMultiNodeEthClient(clients, names)
-	syncService := service.NewMultiNodeSyncService(multiNode)
-
-	// 实时监听任务（每新区块触发）
-	realtimeTicker := time.NewTicker(time.Duration(config.GlobalConfig.Sync.RealtimeInterval) * time.Second)
-	defer realtimeTicker.Stop()
-	pollingTicker := time.NewTicker(time.Duration(config.GlobalConfig.Sync.PollingInterval) * time.Second)
-	defer pollingTicker.Stop()
-	done := make(chan struct{})
-
-	for {
-		select {
-		case <-realtimeTicker.C:
-			ctx := context.Background()
-			syncService.SyncMintEventsRealtime(ctx)
-		case <-pollingTicker.C:
-			ctx := context.Background()
-			syncService.SyncMintEventsPolling(ctx)
-		case <-done:
-			return
+	// 启动nft实时同步 goroutine
+	go func() {
+		realtimeTicker := time.NewTicker(time.Duration(bizCtx.Config.Sync.RealtimeInterval) * time.Second)
+		defer realtimeTicker.Stop()
+		ctx := context.Background()
+		for {
+			<-realtimeTicker.C
+			service.NewMultiNodeSyncService(bizCtx).SyncMintEventsRealtime(ctx, bizCtx)
 		}
-	}
+	}()
+
+	// 启动nft补全同步 goroutine
+	go func() {
+		pollingTicker := time.NewTicker(time.Duration(bizCtx.Config.Sync.PollingInterval) * time.Second)
+		defer pollingTicker.Stop()
+		ctx := context.Background()
+		for {
+			<-pollingTicker.C
+			service.NewMultiNodeSyncService(bizCtx).SyncMintEventsPolling(ctx, bizCtx)
+		}
+	}()
+
+	// 启动订单同步 goroutine
+	go func() {
+		ticker := time.NewTicker(time.Duration(bizCtx.Config.Sync.OrderInterval) * time.Second)
+		defer ticker.Stop()
+		ctx := context.Background()
+		for {
+			<-ticker.C
+			service.NewMultiNodeSyncService(bizCtx).SyncOrderEventsPolling(ctx, bizCtx)
+		}
+	}()
+
+	select {} // 阻塞主 goroutine，防止退出
 }
