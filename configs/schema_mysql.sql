@@ -42,6 +42,9 @@ CREATE TABLE orders (
     buyer VARCHAR(128),
     price VARCHAR(64) NOT NULL,
     status VARCHAR(32) NOT NULL, -- listed, matched, completed, cancelled
+    tx_hash VARCHAR(128) NOT NULL,
+    block_number BIGINT NOT NULL,
+    block_time BIGINT NOT NULL,
     created_at BIGINT,
     updated_at BIGINT,
     deleted_at BIGINT,

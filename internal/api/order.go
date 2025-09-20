@@ -25,7 +25,7 @@ func GetOrderHandler(ctx *config.Context) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, resp)
 			return
 		}
-		order, err := a.Service.GetOrder(orderID)
+		order, err := service.NewService(ctx).GetOrder(orderID)
 		if err != nil {
 			resp := GetOrderResp{Error: err.Error()}
 			c.JSON(http.StatusNotFound, resp)
@@ -66,50 +66,6 @@ func ListUserOrdersHandler(ctx *config.Context) gin.HandlerFunc {
 		}
 		resp := ListUserOrdersResp{Orders: orders}
 		c.JSON(http.StatusOK, resp)
-	}
-}
-
-// 订单同步请求结构体
-// 可扩展为支持区块高度、时间范围等参数
-// POST /api/orders/sync
-
-type SyncOrdersReq struct {
-	Orders []service.OrderDTO `json:"orders" binding:"required"`
-}
-
-type SyncOrdersResp struct {
-	Success bool   `json:"success"`
-	Error   string `json:"error,omitempty"`
-}
-
-// 订单同步接口
-func SyncOrdersHandler(ctx *config.Context) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var req SyncOrdersReq
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, SyncOrdersResp{Success: false, Error: "invalid request"})
-			return
-		}
-		// DTO 转 dao.Order
-		orders := make([]dao.Order, 0, len(req.Orders))
-		for _, dto := range req.Orders {
-			orders = append(orders, dao.Order{
-				ID:        dto.ID,
-				NFTID:     dto.NFTID,
-				NFTToken:  dto.NFTToken,
-				Seller:    dto.Seller,
-				Buyer:     dto.Buyer,
-				Price:     dto.Price,
-				Status:    dto.Status,
-				CreatedAt: dto.CreatedAt,
-				UpdatedAt: dto.UpdatedAt,
-			})
-		}
-		if err := service.NewService(ctx).SyncOrders(orders); err != nil {
-			c.JSON(http.StatusInternalServerError, SyncOrdersResp{Success: false, Error: err.Error()})
-			return
-		}
-		c.JSON(http.StatusOK, SyncOrdersResp{Success: true})
 	}
 }
 

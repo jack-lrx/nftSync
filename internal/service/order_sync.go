@@ -2,21 +2,14 @@ package service
 
 import (
 	"context"
-	"github.com/gavin/nftSync/internal/blockchain"
 	"github.com/gavin/nftSync/internal/config"
 	"github.com/gavin/nftSync/internal/dao"
+	"gorm.io/gorm"
 	"log"
 	"math/big"
 	"strconv"
 	"time"
 )
-
-func NewOrderSyncService(multiNode *blockchain.MultiNodeEthClient) *MultiNodeSyncService {
-	return &MultiNodeSyncService{
-		MultiNode:       multiNode,
-		lastSyncedBlock: big.NewInt(0),
-	}
-}
 
 // SyncOrderEventsPolling 主节点优先订单同步（生产级，面向对象）
 func (s *MultiNodeSyncService) SyncOrderEventsPolling(ctx context.Context, bizCtx *config.Context) *big.Int {
@@ -72,13 +65,15 @@ func (s *MultiNodeSyncService) SyncOrderEventsPolling(ctx context.Context, bizCt
 	}
 	orders = dedupOrders(orders)
 	if len(orders) > 0 {
-		if err := orderService.SyncOrders(orders); err != nil {
-			log.Printf("[order_sync] 订单同步失败: %v", err)
+		err := s.Dao.DB.Transaction(func(tx *gorm.DB) error {
+			return s.Dao.CreateOrdersIgnoreConflict(orders)
+		})
+		if err != nil {
+			log.Printf("[order_sync] 订单批量插入失败: %v", err)
 		} else {
 			log.Printf("[order_sync] 已同步订单数: %d", len(orders))
 		}
 	}
-	s.lastSyncedBlock.Set(safeBlock)
 	log.Printf("[order_sync] 订单轮询同步完成，已安全同步到区块 %v", safeBlock)
 	return safeBlock
 }

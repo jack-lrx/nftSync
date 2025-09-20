@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // OrderStatus 订单状态枚举
@@ -17,24 +18,29 @@ const (
 // Order 订单结构体
 // 一个订单代表一次NFT挂单或成交
 type Order struct {
-	ID        int64     `json:"id" db:"id"`
-	NFTID     int64     `json:"nft_id" db:"nft_id"`
-	NFTToken  string    `json:"nft_token" db:"nft_token"`
-	Seller    string    `json:"seller" db:"seller"`
-	Buyer     string    `json:"buyer" db:"buyer"`
-	Price     float64   `json:"price" db:"price"`
-	Fee       float64   `json:"fee" db:"fee"`
-	Status    string    `json:"status" db:"status"`
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+	ID          int64     `json:"id" db:"id"`
+	NFTID       int64     `json:"nft_id" db:"nft_id"`
+	NFTToken    string    `json:"nft_token" db:"nft_token"`
+	Seller      string    `json:"seller" db:"seller"`
+	Buyer       string    `json:"buyer" db:"buyer"`
+	Price       float64   `json:"price" db:"price"`
+	Fee         float64   `json:"fee" db:"fee"`
+	Status      string    `json:"status" db:"status"`
+	CreatedAt   time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
+	TxHash      string    `json:"tx_hash" db:"tx_hash"`
+	BlockNumber uint64    `json:"block_number" db:"block_number"`
+	BlockTime   int64     `json:"block_time" db:"block_time"`
 }
-
-// Dao 订单数据访问对象
-// 用于分层管理订单持久化逻辑，风格参考NFTRepository
 
 // 创建订单
 func (r *Dao) CreateOrder(order *Order) error {
 	return r.DB.Create(order).Error
+}
+
+// 批量插入订单，已存在数据自动跳过
+func (r *Dao) CreateOrdersIgnoreConflict(orders []Order) error {
+	return r.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&orders).Error
 }
 
 // 查询订单详情
