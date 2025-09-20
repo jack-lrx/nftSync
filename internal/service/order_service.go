@@ -59,3 +59,22 @@ func (s *Service) ToOrderDTO(order *dao.Order) *OrderDTO {
 		UpdatedAt: order.UpdatedAt,
 	}
 }
+
+// 订单统计 DTO
+// 可根据实际业务裁剪字段
+type OrderStatsDTO struct {
+	Total       int64   `json:"total"`
+	TotalAmount float64 `json:"total_amount"`
+}
+
+// GetOrderStats 查询订单统计（生产级）
+func (s *Service) GetOrderStats() (*OrderStatsDTO, error) {
+	stats, err := s.Dao.GetOrderStats()
+	if err != nil {
+		return nil, err
+	}
+	return &OrderStatsDTO{
+		Total:       stats.Total,
+		TotalAmount: stats.TotalAmount,
+	}, nil
+}

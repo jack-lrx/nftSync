@@ -2,7 +2,6 @@ package api
 
 import (
 	"github.com/gavin/nftSync/internal/config"
-	"github.com/gavin/nftSync/internal/dao"
 	"github.com/gavin/nftSync/internal/service"
 	"github.com/gin-gonic/gin"
 	"net/http"
@@ -80,11 +79,14 @@ type GetOrderStatsResp struct {
 
 func GetOrderStatsHandler(ctx *config.Context) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		total, totalAmount, err := service.NewService(ctx).GetOrderStats()
+		stats, err := service.NewService(ctx).GetOrderStats()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, GetOrderStatsResp{Error: err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, GetOrderStatsResp{Total: total, TotalAmount: totalAmount})
+		c.JSON(http.StatusOK, GetOrderStatsResp{
+			Total:       stats.Total,
+			TotalAmount: stats.TotalAmount,
+		})
 	}
 }

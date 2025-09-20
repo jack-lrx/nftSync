@@ -87,3 +87,21 @@ func (r *Dao) ListUserOrders(owner string) ([]Order, error) {
 	}
 	return orders, nil
 }
+
+// 订单统计（生产级，统计已成交订单数和总金额）
+type OrderStats struct {
+	Total       int64
+	TotalAmount float64
+}
+
+func (r *Dao) GetOrderStats() (*OrderStats, error) {
+	var stats OrderStats
+	err := r.DB.Model(&Order{}).
+		Select("COUNT(*) as total, COALESCE(SUM(price),0) as total_amount").
+		Where("status = ?", OrderStatusCompleted).
+		Scan(&stats).Error
+	if err != nil {
+		return nil, err
+	}
+	return &stats, nil
+}
