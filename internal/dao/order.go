@@ -19,20 +19,20 @@ const (
 // Order 订单结构体
 // 一个订单代表一次NFT挂单或成交
 type Order struct {
-	ID          int64           `json:"id" db:"id"`
-	OrderID     string          `json:"order_id" db:"order_id"` // 订单唯一键
-	NFTID       int64           `json:"nft_id" db:"nft_id"`
-	NFTToken    string          `json:"nft_token" db:"nft_token"`
-	Seller      string          `json:"seller" db:"seller"`
-	Buyer       string          `json:"buyer" db:"buyer"`
-	Price       decimal.Decimal `json:"price" db:"price"`
-	Fee         decimal.Decimal `json:"fee" db:"fee"`
-	Status      string          `json:"status" db:"status"`
-	CreatedAt   time.Time       `json:"created_at" db:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at" db:"updated_at"`
-	TxHash      string          `json:"tx_hash" db:"tx_hash"`
-	BlockNumber uint64          `json:"block_number" db:"block_number"`
-	BlockTime   int64           `json:"block_time" db:"block_time"`
+	ID          int64           `gorm:"primaryKey;column:id" json:"id"`
+	OrderID     string          `gorm:"uniqueIndex;column:order_id" json:"order_id"` // 订单唯一键
+	NFTID       int64           `gorm:"column:nft_id" json:"nft_id"`
+	NFTToken    string          `gorm:"column:nft_token" json:"nft_token"`
+	Seller      string          `gorm:"column:seller" json:"seller"`
+	Buyer       string          `gorm:"column:buyer" json:"buyer"`
+	Price       decimal.Decimal `gorm:"type:decimal(38,18);column:price" json:"price"`
+	Fee         decimal.Decimal `gorm:"type:decimal(38,18);column:fee" json:"fee"`
+	Status      string          `gorm:"column:status" json:"status"`
+	CreatedAt   time.Time       `gorm:"autoCreateTime;column:created_at" json:"created_at"`
+	UpdatedAt   time.Time       `gorm:"autoUpdateTime;column:updated_at" json:"updated_at"`
+	TxHash      string          `gorm:"column:tx_hash" json:"tx_hash"`
+	BlockNumber uint64          `gorm:"column:block_number" json:"block_number"`
+	BlockTime   int64           `gorm:"column:block_time" json:"block_time"`
 }
 
 // 创建订单

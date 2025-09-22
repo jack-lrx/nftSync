@@ -4,32 +4,32 @@ import "gorm.io/gorm"
 
 // Item 结构体定义
 type Item struct {
-	ID        uint           `gorm:"primaryKey"`
-	NFTID     uint           `gorm:"index;not null"` // 外键关联NFT
-	Name      string         `gorm:"type:varchar(128)"`
-	TraitType string         `gorm:"type:varchar(64)"`
-	Value     string         `gorm:"type:varchar(128)"`
-	CreatedAt int64          `gorm:"autoCreateTime:milli"`
-	UpdatedAt int64          `gorm:"autoUpdateTime:milli"`
-	DeletedAt gorm.DeletedAt `gorm:"index"`
+	ID        uint           `gorm:"primaryKey" json:"id"`
+	NFTID     uint           `gorm:"index;not null" json:"nft_id"` // 外键关联NFT
+	Name      string         `gorm:"type:varchar(128)" json:"name"`
+	TraitType string         `gorm:"type:varchar(64)" json:"trait_type"`
+	Value     string         `gorm:"type:varchar(128)" json:"value"`
+	CreatedAt int64          `gorm:"autoCreateTime:milli" json:"created_at"`
+	UpdatedAt int64          `gorm:"autoUpdateTime:milli" json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at"`
 }
 
 // NFT 结构体定义
 type NFT struct {
-	ID          uint           `gorm:"primaryKey"`
-	TokenID     string         `gorm:"index;not null"`
-	Contract    string         `gorm:"index;not null"`
-	Owner       string         `gorm:"index;not null"`
-	TokenURI    string         `gorm:"type:text"`
-	Metadata    string         `gorm:"type:json"`
-	Price       string         `gorm:"type:varchar(64)"`
-	Items       []Item         `gorm:"foreignKey:NFTID"`
-	CreatedAt   int64          `gorm:"autoCreateTime:milli"`
-	UpdatedAt   int64          `gorm:"autoUpdateTime:milli"`
-	DeletedAt   gorm.DeletedAt `gorm:"index"`
-	Confidence  int            `gorm:"default:1"`     // 置信度（采集到该事件的节点数）
-	Confirmed   bool           `gorm:"default:false"` // 是否已确认
-	SourceNodes string         `gorm:"type:text"`     // 来源节点（逗号分隔）
+	ID          uint           `gorm:"primaryKey" json:"id"`
+	TokenID     string         `gorm:"index;not null" json:"token_id"`
+	Contract    string         `gorm:"index;not null" json:"contract"`
+	Owner       string         `gorm:"index;not null" json:"owner"`
+	TokenURI    string         `gorm:"type:text" json:"token_uri"`
+	Metadata    string         `gorm:"type:json" json:"metadata"`
+	Price       string         `gorm:"type:varchar(64)" json:"price"`
+	Items       []Item         `gorm:"foreignKey:NFTID" json:"items"`
+	CreatedAt   int64          `gorm:"autoCreateTime:milli" json:"created_at"`
+	UpdatedAt   int64          `gorm:"autoUpdateTime:milli" json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"deleted_at"`
+	Confidence  int            `gorm:"default:1" json:"confidence"`    // 置信度（采集到该事件的节点数）
+	Confirmed   bool           `gorm:"default:false" json:"confirmed"` // 是否已确认
+	SourceNodes string         `gorm:"type:text" json:"source_nodes"`  // 来源节点（逗号分隔）
 }
 
 // Dao 结构体已在 dao.go 定义

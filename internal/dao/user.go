@@ -11,7 +11,7 @@ type User struct {
 	Email        string    `json:"email" gorm:"uniqueIndex"`
 	PasswordHash string    `json:"-"`
 	WalletAddr   string    `json:"wallet_addr" gorm:"uniqueIndex"`
-	CreatedAt    time.Time `json:"created_at"`
+	CreatedAt    time.Time `json:"created_at" gorm:"autoCreateTime"`
 }
 
 // Dao 用户数据访问对象
