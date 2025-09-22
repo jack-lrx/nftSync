@@ -15,8 +15,6 @@ import (
 	"strings"
 )
 
-// 多节点同步服务结构体
-
 // 实时监听铸造事件（Transfer from=0x0）
 func (s *MultiNodeSyncService) SyncMintEventsRealtime(ctx context.Context, bizCtx *config.Context) {
 	latestBlock := getLatestBlock(s.MultiNode, ctx)
@@ -28,7 +26,7 @@ func (s *MultiNodeSyncService) SyncMintEventsRealtime(ctx context.Context, bizCt
 	// 合约地址直接用全局配置
 	nftContracts := bizCtx.Config.NFTContracts
 	for _, contract := range nftContracts {
-		multiEvents := s.MultiNode.FetchTransferEventsAllNodes(contract, startBlock, startBlock, ctx)
+		multiEvents := s.FetchTransferEventsAllNodes(contract, startBlock, startBlock, ctx)
 		for _, mevt := range multiEvents {
 			if !isMintEvent(mevt.Event) {
 				continue
@@ -54,7 +52,7 @@ func (s *MultiNodeSyncService) SyncMintEventsPolling(ctx context.Context, bizCtx
 	}
 	nftContracts := bizCtx.Config.NFTContracts
 	for _, contract := range nftContracts {
-		multiEvents := s.MultiNode.FetchTransferEventsAllNodes(contract, startBlock, safeBlock, ctx)
+		multiEvents := s.FetchTransferEventsAllNodes(contract, startBlock, safeBlock, ctx)
 		for _, mevt := range multiEvents {
 			if !isMintEvent(mevt.Event) {
 				continue
@@ -72,10 +70,10 @@ func isMintEvent(evt blockchain.TransferEvent) bool {
 }
 
 // 获取最新区块（多节点交叉验证，取最小值，保证所有节点都能采集到数据）
-func getLatestBlock(multiNode *blockchain.MultiNodeEthClient, ctx context.Context) *big.Int {
+func getLatestBlock(multiNode *config.MultiNodeEthClient, ctx context.Context) *big.Int {
 	var minBlock *big.Int
 	for _, cli := range multiNode.Clients {
-		blk, err := cli.GetBlockNumber(ctx)
+		blk, err := blockchain.NewEthClient(cli).GetBlockNumber(ctx)
 		if err == nil {
 			if minBlock == nil || blk.Cmp(minBlock) < 0 {
 				minBlock = new(big.Int).Set(blk)
@@ -86,14 +84,14 @@ func getLatestBlock(multiNode *blockchain.MultiNodeEthClient, ctx context.Contex
 }
 
 // 处理铸造事件，交叉验证、分叉检测、持久化
-func processMintEvent(mevt blockchain.MultiNodeTransferEvent, contract string, s *MultiNodeSyncService, ctx context.Context) {
+func processMintEvent(mevt MultiNodeTransferEvent, contract string, s *MultiNodeSyncService, ctx context.Context) {
 	confirmed := mevt.Confidence >= len(s.MultiNode.Clients)
 	tokenIdBig, err := strconv.ParseInt(mevt.Event.TokenID, 0, 64)
 	if err != nil {
 		log.Printf("tokenId解析失败: %v", err)
 		return
 	}
-	tokenURI, err := s.MultiNode.Clients[0].GetTokenURI(ctx, contract, big.NewInt(tokenIdBig))
+	tokenURI, err := blockchain.NewEthClient(s.MultiNode.Clients[0]).GetTokenURI(ctx, contract, big.NewInt(tokenIdBig))
 	if err != nil {
 		log.Printf("tokenURI获取失败: %v", err)
 		return

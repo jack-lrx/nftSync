@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"github.com/gavin/nftSync/internal/blockchain"
 	"github.com/gavin/nftSync/internal/config"
 	"github.com/gavin/nftSync/internal/dao"
 	"gorm.io/gorm"
@@ -14,7 +15,8 @@ import (
 // SyncOrderEventsPolling 主节点优先订单同步（生产级，面向对象）
 func (s *MultiNodeSyncService) SyncOrderEventsPolling(ctx context.Context, bizCtx *config.Context) *big.Int {
 	mainClient := s.MultiNode.Clients[0]
-	latestBlock, err := mainClient.GetBlockNumber(ctx)
+	ethClient := blockchain.NewEthClient(mainClient)
+	latestBlock, err := ethClient.GetBlockNumber(ctx)
 	if err != nil {
 		log.Printf("[order_sync] 主节点获取最新区块失败: %v", err)
 		return s.lastSyncedBlock
@@ -30,11 +32,11 @@ func (s *MultiNodeSyncService) SyncOrderEventsPolling(ctx context.Context, bizCt
 	var orders []dao.Order
 
 	for _, contract := range orderContracts {
-		orderEvents, err := mainClient.FetchOrderFilledEvents(ctx, contract, startBlock, safeBlock)
+		orderEvents, err := ethClient.FetchOrderFilledEvents(ctx, contract, startBlock, safeBlock)
 		if err != nil {
 			log.Printf("[order_sync] 主节点订单事件拉取失败: %v，尝试其他节点补全", err)
 			for i := 1; i < len(s.MultiNode.Clients); i++ {
-				orderEvents, err = s.MultiNode.Clients[i].FetchOrderFilledEvents(ctx, contract, startBlock, safeBlock)
+				orderEvents, err = blockchain.NewEthClient(s.MultiNode.Clients[i]).FetchOrderFilledEvents(ctx, contract, startBlock, safeBlock)
 				if err == nil && len(orderEvents) > 0 {
 					break
 				}

@@ -1,11 +1,10 @@
 package config
 
 import (
-	"github.com/gavin/nftSync/internal/blockchain"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/go-redis/redis/v8"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	"log"
 )
 
 // Context 只包含基础资源，业务对象由 service 层组合
@@ -15,7 +14,12 @@ type Context struct {
 	Config    *AppConfig
 	Db        *gorm.DB
 	Redis     *redis.Client
-	MultiNode *blockchain.MultiNodeEthClient
+	MultiNode *MultiNodeEthClient
+}
+
+type MultiNodeEthClient struct {
+	Clients   []*ethclient.Client
+	NodeNames []string // 节点标识
 }
 
 // NewContext 支持传入配置路径，返回错误，便于上层处理
@@ -37,12 +41,10 @@ func NewContext(configPath string) (*Context, error) {
 		DB:       cfg.Redis.DB,
 	})
 
-	clients, names, err := blockchain.NewEthClientsFromConfig(cfg)
+	multiNode, err := newMultiNodeEthClient(cfg)
 	if err != nil {
-		log.Fatalf("节点初始化失败: %v", err)
+		return nil, err
 	}
-
-	multiNode := blockchain.NewMultiNodeEthClient(clients, names)
 
 	ctx := &Context{
 		Config:    cfg,
@@ -59,4 +61,22 @@ func (c *Context) Close() {
 		_ = c.Redis.Close()
 	}
 	// gorm.DB 无需手动关闭
+}
+
+// newMultiNodeEthClient 根据配置初始化所有节点
+func newMultiNodeEthClient(cfg *AppConfig) (*MultiNodeEthClient, error) {
+	clients := []*ethclient.Client{}
+	names := []string{}
+	for _, node := range cfg.EthNodes {
+		cli, err := ethclient.Dial(node.URL)
+		if err != nil {
+			return nil, err
+		}
+		clients = append(clients, cli)
+		names = append(names, node.Name)
+	}
+	return &MultiNodeEthClient{
+		Clients:   clients,
+		NodeNames: names,
+	}, nil
 }
