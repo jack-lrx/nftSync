@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-var orderCreatedEventABI = `[{"anonymous":false,"inputs":[{"indexed":false,"name":"orderId","type":"bytes32"},{"indexed":false,"name":"seller","type":"address"},{"indexed":false,"name":"nftToken","type":"address"},{"indexed":false,"name":"tokenId","type":"uint256"},{"indexed":false,"name":"price","type":"uint256"},{"indexed":false,"name":"fee","type":"uint256"}],"name":"OrderCreated","type":"event"}]`
+var orderCreatedEventABI = `[{"anonymous":false,"inputs":[{"indexed":false,"name":"orderId","type":"bytes32"},{"indexed":false,"name":"seller","type":"address"},{"indexed":false,"name":"nftToken","type":"address"},{"indexed":false,"name":"tokenId","type":"uint256"},{"indexed":false,"name":"price","type":"uint256"},{"indexed":false,"name":"fee","type":"uint256"},{"indexed":false,"name":"isBid","type":"bool"},{"indexed":false,"name":"isCollectionBid","type":"bool"}],"name":"OrderCreated","type":"event"}]`
 
 // SyncOrderEventsPolling 主节点优先订单同步（生产级，面向对象）
 func (s *MultiNodeSyncService) SyncOrderEventsPolling(ctx context.Context, bizCtx *config.Context) *big.Int {
@@ -36,7 +36,7 @@ func (s *MultiNodeSyncService) SyncOrderEventsPolling(ctx context.Context, bizCt
 	orderContracts := bizCtx.Config.OrderContracts
 
 	// 事件topic hash，与eth.go保持一致
-	orderCreatedSig := "OrderCreated(address,address,uint256,uint256,uint256)"
+	orderCreatedSig := "OrderCreated(address,address,uint256,uint256,uint256,bool,bool)"
 	orderCancelledSig := "OrderCancelled(bytes32,address)"
 	orderFilledSig := "OrderFilled(bytes32,bytes32,address,address,uint256,uint256,uint256)"
 	createdTopic := crypto.Keccak256Hash([]byte(orderCreatedSig))
@@ -78,17 +78,29 @@ func (s *MultiNodeSyncService) SyncOrderEventsPolling(ctx context.Context, bizCt
 			topic0 := vLog.Topics[0]
 			if topic0 == createdTopic {
 				var createdLog struct {
-					orderId  [32]byte
-					seller   common.Address
-					nftToken common.Address
-					tokenId  *big.Int
-					price    *big.Int
-					fee      *big.Int
+					orderId         [32]byte
+					seller          common.Address
+					nftToken        common.Address
+					tokenId         *big.Int
+					price           *big.Int
+					fee             *big.Int
+					isBid           bool
+					isCollectionBid bool
 				}
 				// 订单创建事件解析（ABI解包）
 				if err := orderCreatedABI.UnpackIntoInterface(&createdLog, "OrderCreated", vLog.Data); err != nil {
 					log.Printf("[order_sync] 订单事件ABI解包失败: %v", err)
 					continue
+				}
+				var orderType string
+				if createdLog.isBid {
+					if createdLog.isCollectionBid {
+						orderType = dao.OrderTypeCollectionBid
+					} else {
+						orderType = dao.OrderTypeItemBid
+					}
+				} else {
+					orderType = dao.OrderTypeListing
 				}
 				order := dao.Order{
 					OrderID:     common.BytesToHash(createdLog.orderId[:]).Hex(),
@@ -102,6 +114,7 @@ func (s *MultiNodeSyncService) SyncOrderEventsPolling(ctx context.Context, bizCt
 					UpdatedAt:   time.Unix(blockTime, 0),
 					Price:       decimal.NewFromBigInt(createdLog.price, 0),
 					Fee:         decimal.NewFromBigInt(createdLog.fee, 0),
+					OrderType:   orderType,
 				}
 				if err := s.Dao.CreateOrderIgnoreConflict(&order); err != nil {
 					log.Printf("[order_sync] 新订单插入失败: %v", err)

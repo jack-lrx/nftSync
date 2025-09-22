@@ -16,15 +16,23 @@ const (
 	OrderStatusCancelled = "cancelled" // 已取消
 )
 
+// 订单类型常量
+const (
+	OrderTypeListing       = "listing"       // 挂单（卖家出售）
+	OrderTypeItemBid       = "itembid"       // 单品出价（买家对某个NFT出价）
+	OrderTypeCollectionBid = "collectionbid" // 合集出价（买家对整个合集出价）
+)
+
 // Order 订单结构体
 // 一个订单代表一次NFT挂单或成交
 type Order struct {
-	ID          int64           `gorm:"primaryKey;column:id" json:"id"`
-	OrderID     string          `gorm:"uniqueIndex;column:order_id" json:"order_id"` // 订单唯一键
-	NFTID       int64           `gorm:"column:nft_id" json:"nft_id"`
-	NFTToken    string          `gorm:"column:nft_token" json:"nft_token"`
-	Seller      string          `gorm:"column:seller" json:"seller"`
-	Buyer       string          `gorm:"column:buyer" json:"buyer"`
+	ID       int64  `gorm:"primaryKey;column:id" json:"id"`
+	OrderID  string `gorm:"uniqueIndex;column:order_id" json:"order_id"` // 订单唯一键
+	NFTID    int64  `gorm:"column:nft_id" json:"nft_id"`
+	NFTToken string `gorm:"column:nft_token" json:"nft_token"`
+	Seller   string `gorm:"column:seller" json:"seller"`
+	Buyer    string `gorm:"column:buyer" json:"buyer"`
+	// OrderType 字段已加入，所有方法已同步
 	Price       decimal.Decimal `gorm:"type:decimal(38,18);column:price" json:"price"`
 	Fee         decimal.Decimal `gorm:"type:decimal(38,18);column:fee" json:"fee"`
 	Status      string          `gorm:"column:status" json:"status"`
@@ -33,6 +41,7 @@ type Order struct {
 	TxHash      string          `gorm:"column:tx_hash" json:"tx_hash"`
 	BlockNumber uint64          `gorm:"column:block_number" json:"block_number"`
 	BlockTime   int64           `gorm:"column:block_time" json:"block_time"`
+	OrderType   string          `gorm:"column:order_type" json:"order_type"` // 订单类型
 }
 
 // 创建订单
