@@ -2,17 +2,20 @@ package service
 
 import (
 	"context"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/gavin/nftSync/internal/blockchain"
 	"github.com/gavin/nftSync/internal/config"
 	"github.com/gavin/nftSync/internal/dao"
-	"gorm.io/gorm"
+	"github.com/shopspring/decimal"
 	"log"
 	"math/big"
-	"strconv"
+	"strings"
 	"time"
 )
+
+var orderCreatedEventABI = `[{"anonymous":false,"inputs":[{"indexed":false,"name":"orderId","type":"bytes32"},{"indexed":false,"name":"seller","type":"address"},{"indexed":false,"name":"nftToken","type":"address"},{"indexed":false,"name":"tokenId","type":"uint256"},{"indexed":false,"name":"price","type":"uint256"},{"indexed":false,"name":"fee","type":"uint256"}],"name":"OrderCreated","type":"event"}]`
 
 // SyncOrderEventsPolling 主节点优先订单同步（生产级，面向对象）
 func (s *MultiNodeSyncService) SyncOrderEventsPolling(ctx context.Context, bizCtx *config.Context) *big.Int {
@@ -35,12 +38,16 @@ func (s *MultiNodeSyncService) SyncOrderEventsPolling(ctx context.Context, bizCt
 	// 事件topic hash，与eth.go保持一致
 	orderCreatedSig := "OrderCreated(address,address,uint256,uint256,uint256)"
 	orderCancelledSig := "OrderCancelled(bytes32,address)"
-	orderFilledSig := "OrderFilled(address,address,uint256,uint256,uint256)"
+	orderFilledSig := "OrderFilled(bytes32,bytes32,address,address,uint256,uint256,uint256)"
 	createdTopic := crypto.Keccak256Hash([]byte(orderCreatedSig))
 	cancelledTopic := crypto.Keccak256Hash([]byte(orderCancelledSig))
 	filledTopic := crypto.Keccak256Hash([]byte(orderFilledSig))
 
-	var createOrders, cancelOrders, matchOrders []dao.Order
+	orderCreatedABI, err := abi.JSON(strings.NewReader(orderCreatedEventABI))
+	if err != nil {
+		log.Printf("[order_sync] 订单事件ABI解析失败: %v", err)
+		return s.lastSyncedBlock
+	}
 
 	topics := []common.Hash{createdTopic, cancelledTopic, filledTopic}
 	for _, contract := range orderContracts {
@@ -70,98 +77,97 @@ func (s *MultiNodeSyncService) SyncOrderEventsPolling(ctx context.Context, bizCt
 			}
 			topic0 := vLog.Topics[0]
 			if topic0 == createdTopic {
-				// 订单创建事件解析
-				// topics: [OrderCreated, seller, nftToken, ...]
-				if len(vLog.Topics) < 3 {
+				var createdLog struct {
+					orderId  [32]byte
+					seller   common.Address
+					nftToken common.Address
+					tokenId  *big.Int
+					price    *big.Int
+					fee      *big.Int
+				}
+				// 订单创建事件解析（ABI解包）
+				if err := orderCreatedABI.UnpackIntoInterface(&createdLog, "OrderCreated", vLog.Data); err != nil {
+					log.Printf("[order_sync] 订单事件ABI解包失败: %v", err)
 					continue
 				}
 				order := dao.Order{
-					NFTToken:    vLog.Topics[2].Hex(),
-					Seller:      vLog.Topics[1].Hex(),
+					OrderID:     common.BytesToHash(createdLog.orderId[:]).Hex(),
+					NFTToken:    createdLog.nftToken.Hex(),
+					Seller:      createdLog.seller.Hex(),
 					Status:      dao.OrderStatusListed,
 					TxHash:      vLog.TxHash.Hex(),
 					BlockNumber: vLog.BlockNumber,
 					BlockTime:   blockTime,
 					CreatedAt:   time.Unix(blockTime, 0),
 					UpdatedAt:   time.Unix(blockTime, 0),
+					Price:       decimal.NewFromBigInt(createdLog.price, 0),
+					Fee:         decimal.NewFromBigInt(createdLog.fee, 0),
 				}
-				createOrders = append(createOrders, order)
+				if err := s.Dao.CreateOrderIgnoreConflict(&order); err != nil {
+					log.Printf("[order_sync] 新订单插入失败: %v", err)
+				} else {
+					log.Printf("[order_sync] 新订单已同步: %s, orderId: %s", order.TxHash, order.OrderID)
+				}
 			} else if topic0 == cancelledTopic {
-				// 订单取消事件解析
-				order := dao.Order{
-					TxHash:      vLog.TxHash.Hex(),
-					Status:      dao.OrderStatusCancelled,
-					BlockNumber: vLog.BlockNumber,
-					BlockTime:   blockTime,
-					UpdatedAt:   time.Unix(blockTime, 0),
-				}
-				cancelOrders = append(cancelOrders, order)
-			} else if topic0 == filledTopic {
-				// 订单成交事件解析
-				if len(vLog.Topics) < 4 {
+				// 订单取消事件解析，orderId直接从topics[1]获取
+				if len(vLog.Topics) < 2 {
+					log.Printf("[order_sync] 取消事件topics不足: txHash=%s", vLog.TxHash.Hex())
 					continue
 				}
-				order := dao.Order{
-					NFTToken:    vLog.Topics[3].Hex(),
-					Seller:      vLog.Topics[1].Hex(),
-					Buyer:       vLog.Topics[2].Hex(),
-					Status:      dao.OrderStatusCompleted,
-					TxHash:      vLog.TxHash.Hex(),
-					BlockNumber: vLog.BlockNumber,
-					BlockTime:   blockTime,
-					CreatedAt:   time.Unix(blockTime, 0),
-					UpdatedAt:   time.Unix(blockTime, 0),
+				orderId := vLog.Topics[1].Hex()
+				// 查询订单是否存在
+				order, err := s.Dao.GetOrderByOrderID(orderId)
+				if err != nil {
+					log.Printf("[order_sync] 查询订单失败: %v", err)
+					continue
 				}
-				matchOrders = append(matchOrders, order)
+				if order == nil {
+					log.Printf("[order_sync] 取消事件未找到订单: orderId=%s", orderId)
+					continue
+				}
+				// 更新订单状态为取消
+				if err := s.Dao.UpdateOrderStatusByOrderID(orderId, dao.OrderStatusCancelled); err != nil {
+					log.Printf("[order_sync] 取消订单更新失败: %v", err)
+				} else {
+					log.Printf("[order_sync] 取消订单已同步: orderId=%s", orderId)
+				}
+			} else if topic0 == filledTopic {
+				// 订单完成事件，orderId从topics[1]、topics[2]获取
+				if len(vLog.Topics) < 3 {
+					log.Printf("[order_sync] 成交事件topics不足: txHash=%s", vLog.TxHash.Hex())
+					continue
+				}
+				sellerOrderId := vLog.Topics[1].Hex()
+				buyerOrderId := vLog.Topics[2].Hex()
+				// 卖家订单状态更新
+				sellerOrder, err := s.Dao.GetOrderByOrderID(sellerOrderId)
+				if err != nil {
+					log.Printf("[order_sync] 查询卖家订单失败: %v", err)
+				} else if sellerOrder != nil {
+					if err := s.Dao.UpdateOrderStatusByOrderID(sellerOrderId, dao.OrderStatusCompleted); err != nil {
+						log.Printf("[order_sync] 卖家订单状态更新失败: %v", err)
+					} else {
+						log.Printf("[order_sync] 卖家订单已完成: orderId=%s", sellerOrderId)
+					}
+				} else {
+					log.Printf("[order_sync] 卖家订单不存在: orderId=%s", sellerOrderId)
+				}
+				// 买家订单状态更新
+				buyerOrder, err := s.Dao.GetOrderByOrderID(buyerOrderId)
+				if err != nil {
+					log.Printf("[order_sync] 查询买家订单失败: %v", err)
+				} else if buyerOrder != nil {
+					if err := s.Dao.UpdateOrderStatusByOrderID(buyerOrderId, dao.OrderStatusCompleted); err != nil {
+						log.Printf("[order_sync] 买家订单状态更新失败: %v", err)
+					} else {
+						log.Printf("[order_sync] 买家订单已完成: orderId=%s", buyerOrderId)
+					}
+				} else {
+					log.Printf("[order_sync] 买家订单不存在: orderId=%s", buyerOrderId)
+				}
 			}
 		}
 	}
-	// 批量插入新订单
-	if len(createOrders) > 0 {
-		err := s.Dao.DB.Transaction(func(tx *gorm.DB) error {
-			return s.Dao.CreateOrdersIgnoreConflict(createOrders)
-		})
-		if err != nil {
-			log.Printf("[order_sync] 新订单批量插入失败: %v", err)
-		} else {
-			log.Printf("[order_sync] 已同步新订单数: %d", len(createOrders))
-		}
-	}
-	// 批量更新取消订单
-	if len(cancelOrders) > 0 {
-		for _, order := range cancelOrders {
-			_ = s.Dao.UpdateOrderStatusByTxHash(order.TxHash, dao.OrderStatusCancelled)
-		}
-		log.Printf("[order_sync] 已同步取消订单数: %d", len(cancelOrders))
-	}
-	// 批量更新成交订单
-	if len(matchOrders) > 0 {
-		for _, order := range matchOrders {
-			_ = s.Dao.UpdateOrderStatusByTxHash(order.TxHash, dao.OrderStatusCompleted)
-		}
-		log.Printf("[order_sync] 已同步成交订单数: %d", len(matchOrders))
-	}
 	log.Printf("[order_sync] 订单轮询同步完成，已安全同步到区块 %v", safeBlock)
 	return safeBlock
-}
-
-func parseTokenID(tokenID string) int64 {
-	id, err := strconv.ParseInt(tokenID, 0, 64)
-	if err != nil {
-		return 0
-	}
-	return id
-}
-
-func dedupOrders(orders []dao.Order) []dao.Order {
-	seen := make(map[string]struct{})
-	var result []dao.Order
-	for _, o := range orders {
-		key := o.TxHash + ":" + o.NFTToken + ":" + strconv.FormatUint(o.BlockNumber, 10)
-		if _, ok := seen[key]; !ok {
-			seen[key] = struct{}{}
-			result = append(result, o)
-		}
-	}
-	return result
 }

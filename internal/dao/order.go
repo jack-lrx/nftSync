@@ -3,6 +3,7 @@ package dao
 import (
 	"time"
 
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -18,19 +19,20 @@ const (
 // Order 订单结构体
 // 一个订单代表一次NFT挂单或成交
 type Order struct {
-	ID          int64     `json:"id" db:"id"`
-	NFTID       int64     `json:"nft_id" db:"nft_id"`
-	NFTToken    string    `json:"nft_token" db:"nft_token"`
-	Seller      string    `json:"seller" db:"seller"`
-	Buyer       string    `json:"buyer" db:"buyer"`
-	Price       float64   `json:"price" db:"price"`
-	Fee         float64   `json:"fee" db:"fee"`
-	Status      string    `json:"status" db:"status"`
-	CreatedAt   time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
-	TxHash      string    `json:"tx_hash" db:"tx_hash"`
-	BlockNumber uint64    `json:"block_number" db:"block_number"`
-	BlockTime   int64     `json:"block_time" db:"block_time"`
+	ID          int64           `json:"id" db:"id"`
+	OrderID     string          `json:"order_id" db:"order_id"` // 订单唯一键
+	NFTID       int64           `json:"nft_id" db:"nft_id"`
+	NFTToken    string          `json:"nft_token" db:"nft_token"`
+	Seller      string          `json:"seller" db:"seller"`
+	Buyer       string          `json:"buyer" db:"buyer"`
+	Price       decimal.Decimal `json:"price" db:"price"`
+	Fee         decimal.Decimal `json:"fee" db:"fee"`
+	Status      string          `json:"status" db:"status"`
+	CreatedAt   time.Time       `json:"created_at" db:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at" db:"updated_at"`
+	TxHash      string          `json:"tx_hash" db:"tx_hash"`
+	BlockNumber uint64          `json:"block_number" db:"block_number"`
+	BlockTime   int64           `json:"block_time" db:"block_time"`
 }
 
 // 创建订单
@@ -39,8 +41,8 @@ func (r *Dao) CreateOrder(order *Order) error {
 }
 
 // 批量插入订单，已存在数据自动跳过
-func (r *Dao) CreateOrdersIgnoreConflict(orders []Order) error {
-	return r.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&orders).Error
+func (r *Dao) CreateOrderIgnoreConflict(order *Order) error {
+	return r.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(order).Error
 }
 
 // 查询订单详情
@@ -104,4 +106,21 @@ func (r *Dao) GetOrderStats() (*OrderStats, error) {
 		return nil, err
 	}
 	return &stats, nil
+}
+
+// 根据OrderID查询订单
+func (r *Dao) GetOrderByOrderID(orderId string) (*Order, error) {
+	var order Order
+	if err := r.DB.Where("order_id = ?", orderId).First(&order).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &order, nil
+}
+
+// 根据OrderID更新订单状态
+func (r *Dao) UpdateOrderStatusByOrderID(orderId string, status string) error {
+	return r.DB.Model(&Order{}).Where("order_id = ?", orderId).Update("status", status).Error
 }
