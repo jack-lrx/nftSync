@@ -35,11 +35,11 @@ type OrderDTO struct {
 	NFTToken  string    `json:"nft_token"`
 	Seller    string    `json:"seller"`
 	Buyer     string    `json:"buyer"`
-	Price     float64   `json:"price"`
+	Price     string    `json:"price"` // decimal.Decimal转string
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
-	Fee       float64   `json:"fee"`
+	Fee       string    `json:"fee"` // decimal.Decimal转string
 }
 
 // ToOrderDTO 将 dao.Order 转换为 OrderDTO
@@ -53,10 +53,11 @@ func (s *Service) ToOrderDTO(order *dao.Order) *OrderDTO {
 		NFTToken:  order.NFTToken,
 		Seller:    order.Seller,
 		Buyer:     order.Buyer,
-		Price:     order.Price,
+		Price:     order.Price.String(), // decimal.Decimal转string
 		Status:    order.Status,
 		CreatedAt: order.CreatedAt,
 		UpdatedAt: order.UpdatedAt,
+		Fee:       order.Fee.String(), // decimal.Decimal转string
 	}
 }
 
