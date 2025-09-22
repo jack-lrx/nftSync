@@ -3,14 +3,13 @@ package blockchain
 import (
 	"context"
 	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gavin/nftSync/internal/blockchain/erc721"
 	"math/big"
-	"os"
 )
 
 // EthClient 封装以太坊客户端
@@ -20,6 +19,10 @@ type EthClient struct {
 
 func NewEthClient(client *ethclient.Client) *EthClient {
 	return &EthClient{client}
+}
+
+func (e *EthClient) GetBlockByNumber(ctx context.Context, number uint64) (*types.Block, error) {
+	return e.client.BlockByNumber(ctx, big.NewInt(int64(number)))
 }
 
 func (e *EthClient) GetBlockNumber(ctx context.Context) (*big.Int, error) {
@@ -106,78 +109,19 @@ type OrderFilledEvent struct {
 	BlockTime   int64
 }
 
-// FetchOrderFilledEvents 拉取市场合约的订单成交事件（接口/伪代码，需结合ABI实现）
-func (e *EthClient) FetchOrderFilledEvents(ctx context.Context, contract string, startBlock, endBlock *big.Int) ([]OrderFilledEvent, error) {
-	// 市场合约ABI路径（后续可参数化或配置）
-	abiPath := "internal/blockchain/marketplace/Marketplace.abi"
-	abiFile, err := os.Open(abiPath)
-	if err != nil {
-		return nil, err
-	}
-	defer abiFile.Close()
-	marketAbi, err := abi.JSON(abiFile)
-	if err != nil {
-		return nil, err
-	}
-
-	// 事件签名（需与ABI一致）
-	eventSig := "OrderFilled(address,address,uint256,uint256,uint256)"
-	eventTopic := crypto.Keccak256Hash([]byte(eventSig))
-
+// FetchOrderEvents 拉取市场合约的订单相关事件（支持多事件topic参数透传）
+func (e *EthClient) FetchOrderEvents(ctx context.Context, contract string, startBlock, endBlock *big.Int, topics []common.Hash) ([]types.Log, error) {
 	query := ethereum.FilterQuery{
 		FromBlock: startBlock,
 		ToBlock:   endBlock,
 		Addresses: []common.Address{common.HexToAddress(contract)},
-		Topics:    [][]common.Hash{{eventTopic}},
+		Topics:    [][]common.Hash{topics},
 	}
 	logs, err := e.client.FilterLogs(ctx, query)
 	if err != nil {
 		return nil, err
 	}
-
-	var events []OrderFilledEvent
-	for _, vLog := range logs {
-		// 解析 topics
-		if len(vLog.Topics) < 4 {
-			continue // topics数量不足
-		}
-		// seller, buyer, tokenId
-		seller := common.HexToAddress(vLog.Topics[1].Hex()).Hex()
-		buyer := common.HexToAddress(vLog.Topics[2].Hex()).Hex()
-		tokenId := vLog.Topics[3].Hex()
-
-		// 解析 data（price, fee）
-		var event struct {
-			Price *big.Int
-			Fee   *big.Int
-		}
-		err := marketAbi.UnpackIntoInterface(&event, "OrderFilled", vLog.Data)
-		if err != nil {
-			continue // 解码失败跳过
-		}
-
-		block, err := e.client.BlockByNumber(ctx, big.NewInt(int64(vLog.BlockNumber)))
-		var blockTime int64
-		if err == nil {
-			blockTime = int64(block.Time())
-		}
-
-		priceFloat, _ := new(big.Float).SetInt(event.Price).Float64()
-		feeFloat, _ := new(big.Float).SetInt(event.Fee).Float64()
-		orderEvent := OrderFilledEvent{
-			TokenID:     tokenId,
-			Seller:      seller,
-			Buyer:       buyer,
-			Price:       priceFloat,
-			Fee:         feeFloat,
-			Contract:    vLog.Address.Hex(),
-			BlockNumber: vLog.BlockNumber,
-			TxHash:      vLog.TxHash.Hex(),
-			BlockTime:   blockTime,
-		}
-		events = append(events, orderEvent)
-	}
-	return events, nil
+	return logs, nil
 }
 
 // TODO: 添加事件监听与合约交互方法
