@@ -21,23 +21,20 @@ func NewFloorPriceService(bizCtx *config.Context) *FloorPriceService {
 	}
 }
 
-func (fps *FloorPriceService) StartKafkaConsumer(ctx context.Context) error {
-	go func() {
-		for {
-			select {
-			case msg := <-fps.FloorPriceConsumer.Messages():
-				collection := string(msg.Value)
-				log.Printf("[floor_price] 收到地板价更新消息: %s", collection)
-				fps.UpdateFloorPrice(collection)
-			case err := <-fps.FloorPriceConsumer.Errors():
-				log.Printf("[floor_price] Kafka消费错误: %v", err)
-			case <-ctx.Done():
-				fps.FloorPriceConsumer.Close()
-				return
-			}
+func (fps *FloorPriceService) StartKafkaConsumer(ctx context.Context) {
+	for {
+		select {
+		case msg := <-fps.FloorPriceConsumer.Messages():
+			collection := string(msg.Value)
+			log.Printf("[floor_price] 收到地板价更新消息: %s", collection)
+			fps.UpdateFloorPrice(collection)
+		case err := <-fps.FloorPriceConsumer.Errors():
+			log.Printf("[floor_price] Kafka消费错误: %v", err)
+		case <-ctx.Done():
+			fps.FloorPriceConsumer.Close()
+			return
 		}
-	}()
-	return nil
+	}
 }
 
 // UpdateFloorPrice 计算并更新地板价

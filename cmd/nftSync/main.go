@@ -87,10 +87,9 @@ func main() {
 	}()
 
 	//地板价消息消费
-	err = service.NewFloorPriceService(bizCtx).StartKafkaConsumer(context.Background())
-	if err != nil {
-		log.Fatalf("地板价消息消费启动失败: %v", err)
-	}
+	go func() {
+		service.NewFloorPriceService(bizCtx).StartKafkaConsumer(context.Background())
+	}()
 
 	select {} // 阻塞主 goroutine，防止退出
 }
