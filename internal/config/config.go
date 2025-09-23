@@ -21,18 +21,24 @@ type RedisConfig struct {
 	DB       int    `yaml:"db"`
 }
 type AppConfig struct {
-	EthNodes       []NodeConfig `yaml:"eth_nodes"`
-	DatabaseDSN    string       `yaml:"database.dsn"`
-	APIPort        int          `yaml:"api.port"`
-	NFTContracts   []string     `yaml:"nft_contracts"`
-	OrderContracts []string     `yaml:"order_contracts"`
-	Sync           SyncConfig   `yaml:"sync"`
-	Redis          RedisConfig  `yaml:"redis"`
+	EthNodes        []NodeConfig          `yaml:"eth_nodes"`
+	DatabaseDSN     string                `yaml:"database.dsn"`
+	APIPort         int                   `yaml:"api.port"`
+	NFTContracts    []string              `yaml:"nft_contracts"`
+	OrderContracts  []string              `yaml:"order_contracts"`
+	Sync            SyncConfig            `yaml:"sync"`
+	Redis           RedisConfig           `yaml:"redis"`
+	FloorPriceKafka FloorPriceKafkaConfig `yaml:"floor_price_kafka"`
 }
 
 type NotifyConfig struct {
 	WebhookURL string `yaml:"webhook_url"`
 	MQTopic    string `yaml:"mq_topic"`
+}
+
+type FloorPriceKafkaConfig struct {
+	Brokers []string `yaml:"brokers"`
+	Topic   string   `yaml:"topic"`
 }
 
 func LoadAppConfig(path string) (*AppConfig, error) {

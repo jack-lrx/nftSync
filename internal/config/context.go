@@ -1,7 +1,9 @@
 package config
 
 import (
+	"github.com/IBM/sarama"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/gavin/nftSync/internal/middleware"
 	"github.com/go-redis/redis/v8"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -11,10 +13,12 @@ import (
 // 生产级别建议避免 config 包依赖 dao/service
 
 type Context struct {
-	Config    *AppConfig
-	Db        *gorm.DB
-	Redis     *redis.Client
-	MultiNode *MultiNodeEthClient
+	Config             *AppConfig
+	Db                 *gorm.DB
+	Redis              *redis.Client
+	MultiNode          *MultiNodeEthClient
+	FloorPriceProducer *middleware.KafkaProducer
+	FloorPriceConsumer sarama.PartitionConsumer
 }
 
 type MultiNodeEthClient struct {
@@ -46,11 +50,29 @@ func NewContext(configPath string) (*Context, error) {
 		return nil, err
 	}
 
+	floorPriceProducer, err := middleware.NewKafkaProducer(cfg.FloorPriceKafka.Brokers, cfg.FloorPriceKafka.Topic)
+	if err != nil {
+		return nil, err
+	}
+
+	config := sarama.NewConfig()
+	config.Consumer.Return.Errors = true
+	consumer, err := sarama.NewConsumer(cfg.FloorPriceKafka.Brokers, config)
+	if err != nil {
+		return nil, err
+	}
+	floorPriceConsumer, err := consumer.ConsumePartition(cfg.FloorPriceKafka.Topic, 0, sarama.OffsetNewest)
+	if err != nil {
+		return nil, err
+	}
+
 	ctx := &Context{
-		Config:    cfg,
-		Db:        db,
-		Redis:     redisClient,
-		MultiNode: multiNode,
+		Config:             cfg,
+		Db:                 db,
+		Redis:              redisClient,
+		MultiNode:          multiNode,
+		FloorPriceProducer: floorPriceProducer,
+		FloorPriceConsumer: floorPriceConsumer,
 	}
 	return ctx, nil
 }

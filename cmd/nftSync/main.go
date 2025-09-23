@@ -52,6 +52,7 @@ func main() {
 		}
 	}()
 
+	multiNodeSyncService := service.NewMultiNodeSyncService(bizCtx)
 	// 启动nft实时同步 goroutine
 	go func() {
 		realtimeTicker := time.NewTicker(time.Duration(bizCtx.Config.Sync.RealtimeInterval) * time.Second)
@@ -59,7 +60,7 @@ func main() {
 		ctx := context.Background()
 		for {
 			<-realtimeTicker.C
-			service.NewMultiNodeSyncService(bizCtx).SyncMintEventsRealtime(ctx, bizCtx)
+			multiNodeSyncService.SyncMintEventsRealtime(ctx, bizCtx)
 		}
 	}()
 
@@ -70,7 +71,7 @@ func main() {
 		ctx := context.Background()
 		for {
 			<-pollingTicker.C
-			service.NewMultiNodeSyncService(bizCtx).SyncMintEventsPolling(ctx, bizCtx)
+			multiNodeSyncService.SyncMintEventsPolling(ctx, bizCtx)
 		}
 	}()
 
@@ -81,9 +82,15 @@ func main() {
 		ctx := context.Background()
 		for {
 			<-ticker.C
-			service.NewMultiNodeSyncService(bizCtx).SyncOrderEventsPolling(ctx, bizCtx)
+			multiNodeSyncService.SyncOrderEventsPolling(ctx, bizCtx)
 		}
 	}()
+
+	//地板价消息消费
+	err = service.NewFloorPriceService(bizCtx).StartKafkaConsumer(context.Background())
+	if err != nil {
+		log.Fatalf("地板价消息消费启动失败: %v", err)
+	}
 
 	select {} // 阻塞主 goroutine，防止退出
 }

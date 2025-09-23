@@ -27,3 +27,8 @@ redis:
   addr: "localhost:6379"
   password: ""
   db: 0
+floor_price_kafka:
+  brokers:
+    - "broker1:9092"
+    - "broker2:9092"
+  topic: "floor_price_topic"

@@ -5,22 +5,25 @@ import (
 	"github.com/gavin/nftSync/internal/blockchain"
 	"github.com/gavin/nftSync/internal/config"
 	"github.com/gavin/nftSync/internal/dao"
+	"github.com/gavin/nftSync/internal/middleware"
 	"golang.org/x/net/context"
 	"math/big"
 	"sync"
 )
 
 type MultiNodeSyncService struct {
-	MultiNode       *config.MultiNodeEthClient
-	lastSyncedBlock *big.Int
-	Dao             *dao.Dao
+	MultiNode          *config.MultiNodeEthClient
+	lastSyncedBlock    *big.Int
+	Dao                *dao.Dao
+	FloorPriceProducer *middleware.KafkaProducer
 }
 
 func NewMultiNodeSyncService(ctx *config.Context) *MultiNodeSyncService {
 	return &MultiNodeSyncService{
-		MultiNode:       ctx.MultiNode,
-		lastSyncedBlock: big.NewInt(0),
-		Dao:             dao.New(ctx.Db),
+		MultiNode:          ctx.MultiNode,
+		lastSyncedBlock:    big.NewInt(0),
+		Dao:                dao.New(ctx.Db),
+		FloorPriceProducer: ctx.FloorPriceProducer,
 	}
 }
 

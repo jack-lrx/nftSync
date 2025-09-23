@@ -135,6 +135,13 @@ func (s *MultiNodeSyncService) handleOrderCreated(vLog types.Log, blockTime int6
 		log.Printf("[order_sync] 新订单插入失败: %v", err)
 	} else {
 		log.Printf("[order_sync] 新订单已同步: %s, orderId: %s", order.TxHash, order.OrderID)
+		// 发送地板价更新消息
+		if s.FloorPriceProducer != nil {
+			err := s.FloorPriceProducer.SendFloorPriceUpdateMsg(order.NFTToken)
+			if err != nil {
+				log.Printf("[order_sync] 地板价消息发送失败: %v", err)
+			}
+		}
 	}
 }
 
@@ -158,6 +165,13 @@ func (s *MultiNodeSyncService) handleOrderCancelled(vLog types.Log) {
 		log.Printf("[order_sync] 取消订单更新失败: %v", err)
 	} else {
 		log.Printf("[order_sync] 取消订单已同步: orderId=%s", orderId)
+		// 发送地板价更新消息
+		if s.FloorPriceProducer != nil && order != nil {
+			err := s.FloorPriceProducer.SendFloorPriceUpdateMsg(order.NFTToken)
+			if err != nil {
+				log.Printf("[order_sync] 地板价消息发送失败: %v", err)
+			}
+		}
 	}
 }
 
@@ -194,5 +208,20 @@ func (s *MultiNodeSyncService) handleOrderFilled(vLog types.Log) {
 		}
 	} else {
 		log.Printf("[order_sync] 买家订单不存在: orderId=%s", buyerOrderId)
+	}
+	// 发送地板价更新消息（假设 NFTToken 可从订单查得，实际可根据业务调整）
+	if s.FloorPriceProducer != nil {
+		if sellerOrder != nil {
+			err := s.FloorPriceProducer.SendFloorPriceUpdateMsg(sellerOrder.NFTToken)
+			if err != nil {
+				log.Printf("[order_sync] 地板价消息发送失败: %v", err)
+			}
+		}
+		if buyerOrder != nil {
+			err := s.FloorPriceProducer.SendFloorPriceUpdateMsg(buyerOrder.NFTToken)
+			if err != nil {
+				log.Printf("[order_sync] 地板价消息发送失败: %v", err)
+			}
+		}
 	}
 }
