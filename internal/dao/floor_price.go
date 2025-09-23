@@ -1,7 +1,7 @@
 package dao
 
 import (
-	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // FloorPrice 地板价表
@@ -19,7 +19,11 @@ type FloorPrice struct {
 // UpdateFloorPrice 更新地板价
 func (r *Dao) UpdateFloorPrice(collection string, price string) error {
 	fp := FloorPrice{Collection: collection, Price: price}
-	return r.DB.Clauses(gorm.Clauses{gorm.OnConflict{UpdateAll: true}}).Create(&fp).Error
+	// 插入或更新地板价（如果已存在则更新）
+	return r.DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "collection"}},       // 以 collection 唯一约束
+		DoUpdates: clause.AssignmentColumns([]string{"price"}), // 只更新 price 字段
+	}).Create(&fp).Error
 }
 
 // ListOrdersByCollection 查询某合集所有挂单订单
